@@ -1,0 +1,17 @@
+{
+  "item.thecatalog.catalog": "Каталог",
+  "key.categories.thecatalog": "Каталог",
+  "key.thecatalog.open": "Открыть каталог",
+  "key.thecatalog.recipes": "Показать рецепты (предмет под курсором)",
+  "key.thecatalog.uses": "Показать применения (предмет под курсором)",
+  "gui.thecatalog.all": "Все предметы",
+  "gui.thecatalog.search": "Поиск... (@мод)",
+  "gui.thecatalog.recipes": "Рецепты",
+  "gui.thecatalog.uses": "Применения",
+  "gui.thecatalog.no_recipes": "Рецепт неизвестен",
+  "gui.thecatalog.no_uses": "Нигде не используется",
+  "gui.thecatalog.nothing_found": "Ничего не найдено",
+  "gui.thecatalog.back": "Назад",
+  "gui.thecatalog.cooking": "%s с · %s опыта",
+  "thecatalog.configuration.giveOnFirstJoin": "Выдавать каталог при первом входе"
+}

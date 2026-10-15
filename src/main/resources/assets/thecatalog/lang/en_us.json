@@ -1,0 +1,17 @@
+{
+  "item.thecatalog.catalog": "The Catalog",
+  "key.categories.thecatalog": "The Catalog",
+  "key.thecatalog.open": "Open Catalog",
+  "key.thecatalog.recipes": "Show Recipes (hovered item)",
+  "key.thecatalog.uses": "Show Uses (hovered item)",
+  "gui.thecatalog.all": "All Items",
+  "gui.thecatalog.search": "Search... (@mod)",
+  "gui.thecatalog.recipes": "Recipes",
+  "gui.thecatalog.uses": "Uses",
+  "gui.thecatalog.no_recipes": "No known recipe",
+  "gui.thecatalog.no_uses": "Not used in any recipe",
+  "gui.thecatalog.nothing_found": "Nothing found",
+  "gui.thecatalog.back": "Back",
+  "gui.thecatalog.cooking": "%s s · %s XP",
+  "thecatalog.configuration.giveOnFirstJoin": "Give Catalog on first join"
+}
