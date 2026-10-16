@@ -247,9 +247,11 @@ public class CatalogScreen extends Screen {
         else entries.addAll(v.uses() ? index.usesFor(v.stack()) : index.recipesFor(v.stack()));
         // The Catalog's own extras, shown with or without JEI
         entries.addAll(index.tradesFor(v.stack(), v.uses()));
-        if (!v.uses()) {
-            InfoEntry worldgen = InfoEntry.worldgen(v.stack());
-            if (worldgen != null) entries.add(worldgen);
+        if (!v.uses()) { // where it generates: the chart if there is data for it, otherwise the text version
+            Generation chart = Generation.of(v.stack());
+            InfoEntry text = chart == null ? InfoEntry.worldgen(v.stack()) : null;
+            if (chart != null) entries.add(chart);
+            if (text != null) entries.add(text);
         }
         return entries;
     }
@@ -501,6 +503,7 @@ public class CatalogScreen extends Screen {
             if (entry instanceof DisplayRecipe recipe) drawRecipe(g, recipe, x, y, mouseX, mouseY);
             else if (entry instanceof ExternalRecipes.Entry external) drawExternal(g, external, x, y, width, mouseX, mouseY);
             else if (entry instanceof InfoEntry info) drawInfo(g, info, x, y, width, mouseX, mouseY);
+            else if (entry instanceof Generation gen) drawGeneration(g, gen, x, y, width, mouseX, mouseY);
             y += entry.pageHeight(width) + RECIPE_GAP;
         }
     }
@@ -523,7 +526,8 @@ public class CatalogScreen extends Screen {
             if (stack.isDamageableItem()) sentence(text, Component.translatable("gui.thecatalog.desc.durability", stack.getMaxDamage()));
             FoodProperties food = stack.get(DataComponents.FOOD);
             if (food != null) sentence(text, Component.translatable("gui.thecatalog.desc.food", food.nutrition()));
-            int made = (int) allRecipes(new RecipeView(stack, false, 0, 0)).stream().filter(e -> !(e instanceof InfoEntry)).count();
+            int made = (int) allRecipes(new RecipeView(stack, false, 0, 0)).stream()
+                    .filter(e -> !(e instanceof InfoEntry || e instanceof Generation)).count();
             int used = allRecipes(new RecipeView(stack, true, 0, 0)).size();
             sentence(text, made > 0 ? Component.translatable("gui.thecatalog.desc.recipes", made) : Component.translatable("gui.thecatalog.desc.no_recipes"));
             sentence(text, used > 0 ? Component.translatable("gui.thecatalog.desc.uses", used) : Component.translatable("gui.thecatalog.desc.no_uses"));
@@ -601,6 +605,55 @@ public class CatalogScreen extends Screen {
         drawStack(g, info.stack, x, y, mouseX, mouseY);
         List<FormattedCharSequence> lines = font.split(info.text, width - InfoEntry.TEXT_X);
         for (int i = 0; i < lines.size(); i++) g.drawString(font, lines.get(i), x + InfoEntry.TEXT_X, y + 1 + i * font.lineHeight, INK, false);
+    }
+
+    /**
+     * Depth chart: the dimension's full height as a rock column (stone above Y 0, deepslate below), the ore's frequency
+     * at each height beside it, and a dashed line with the ore's icon at the most common height.
+     */
+    private void drawGeneration(GuiGraphics g, Generation gen, int x, int y, int width, int mouseX, int mouseY) {
+        g.renderItem(gen.dimensionIcon(), x, y);
+        g.drawString(font, trim(gen.where(), width - 20), x + 20, y + 4, INK, false);
+        int top = gen.top(), bottom = gen.bottom(), chartTop = y + Generation.HEADER, h = Generation.CHART;
+        int axis = x + 24, plotX = axis + 6, plotW = width - (plotX - x) - 20;
+        double max = 0;
+        for (int row = 0; row < h; row++) max = Math.max(max, gen.density(worldY(row, top, bottom, h)));
+        for (int row = 0; row < h; row++) {
+            int worldY = worldY(row, top, bottom, h);
+            g.fill(axis, chartTop + row, axis + 5, chartTop + row + 1, gen.rockColor(worldY));
+            double density = gen.density(worldY);
+            if (density > 0) {
+                int w = Math.max(1, (int) Math.round(density / max * plotW));
+                g.fill(plotX, chartTop + row, plotX + w, chartTop + row + 1, gen.color());
+            }
+        }
+        // height marks: top, sea level, Y 0, bottom
+        for (int mark : new java.util.TreeSet<>(List.of(top, bottom, 0, 64))) {
+            if (mark < bottom || mark > top || (mark == 64 && bottom != -64)) continue;
+            int py = chartTop + chartRow(mark, top, bottom, h);
+            g.fill(axis - 2, py, axis, py + 1, FAINT_INK);
+            String label = String.valueOf(mark);
+            g.pose().pushPose();
+            g.pose().translate(axis - 3, py - 2, 0);
+            g.pose().scale(0.75f, 0.75f, 1);
+            g.drawString(font, label, -font.width(label), 0, FAINT_INK, false);
+            g.pose().popPose();
+        }
+        int peakRow = chartTop + chartRow(gen.peak(), top, bottom, h);
+        for (int dx = axis; dx < plotX + plotW; dx += 3) g.fill(dx, peakRow, dx + 2, peakRow + 1, INK);
+        drawStack(g, gen.stack, plotX + plotW + 1, peakRow - SLOT / 2, mouseX, mouseY);
+        Component summary = Component.translatable("gui.thecatalog.gen_range", gen.low(), gen.high())
+                .append(" · ").append(Component.translatable("gui.thecatalog.gen_peak", gen.peak()));
+        g.drawString(font, trim(summary, width), x, chartTop + h + 3, INK, false);
+    }
+
+    /** The world height shown by a chart row (row 0 is the top). */
+    private static int worldY(int row, int top, int bottom, int rows) {
+        return top - (int) ((top - bottom) * (row + 0.5) / rows);
+    }
+
+    private static int chartRow(int worldY, int top, int bottom, int rows) {
+        return Math.clamp((int) ((top - worldY) / (double) (top - bottom) * rows), 0, rows - 1);
     }
 
     /** A "}" as tall as the input panel, pointing at the chevron. */

@@ -14,7 +14,8 @@ import org.jetbrains.annotations.Nullable;
 /** A page entry that is text rather than a recipe, such as where an ore generates. */
 public final class InfoEntry implements RecipeEntry {
     static final int TEXT_X = 22;
-    private static final ResourceLocation WORLDGEN = ResourceLocation.fromNamespaceAndPath(TheCatalog.MODID, "worldgen");
+    /** Shared with {@link Generation}, so the chart and the text version sit under the same bookmark. */
+    static final ResourceLocation WORLDGEN = ResourceLocation.fromNamespaceAndPath(TheCatalog.MODID, "worldgen");
 
     final ItemStack stack;
     final Component text;

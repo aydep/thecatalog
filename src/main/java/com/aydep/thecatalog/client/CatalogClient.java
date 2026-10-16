@@ -83,6 +83,7 @@ public final class CatalogClient {
     static void onRegisterReloadListeners(RegisterClientReloadListenersEvent event) {
         event.registerReloadListener((ResourceManagerReloadListener) manager -> {
             CatalogIndex.loadSearchLanguages(manager);
+            Generation.load(manager);
             CatalogIndex.markDirty();
         });
     }

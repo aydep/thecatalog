@@ -1404,5 +1404,11 @@
   "thecatalog.worldgen.minecraft.nether_quartz_ore": "Незер, все биомы. В базальтовых дельтах вдвое чаще.\nВысота: от Y 10 до 117.\nРавномерно рассеяна в незераке.",
   "thecatalog.worldgen.minecraft.ancient_debris": "Незер, все биомы.\nВысота: от Y 8 до 119.\nЧаще всего: около Y 15; никогда не соприкасается с воздухом, поэтому прокапывайте или взрывайте тоннели.",
   "thecatalog.worldgen.minecraft.raw_iron_block": "Верхний мир, все биомы.\nВысота: от Y -60 до -8, внутри крупных железных жил.\nЖилы — длинные ленты туфа вперемешку с железной рудой.",
-  "thecatalog.worldgen.minecraft.raw_copper_block": "Верхний мир, все биомы.\nВысота: от Y 0 до 50, внутри крупных медных жил.\nЖилы — длинные ленты гранита вперемешку с медной рудой."
+  "thecatalog.worldgen.minecraft.raw_copper_block": "Верхний мир, все биомы.\nВысота: от Y 0 до 50, внутри крупных медных жил.\nЖилы — длинные ленты гранита вперемешку с медной рудой.",
+  "gui.thecatalog.all_biomes": "Все биомы",
+  "gui.thecatalog.dimension.overworld": "Верхний мир",
+  "gui.thecatalog.dimension.the_nether": "Незер",
+  "gui.thecatalog.dimension.the_end": "Энд",
+  "gui.thecatalog.gen_range": "Y от %s до %s",
+  "gui.thecatalog.gen_peak": "чаще всего на Y %s"
 }

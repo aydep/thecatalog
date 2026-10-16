@@ -25,6 +25,18 @@ class CatalogLogicTest {
     }
 
     @Test
+    void oreSpreads() {
+        Generation.Spread triangle = new Generation.Spread("triangle", -144, 16, 11);
+        assertEquals(11, triangle.at(-64), 1e-9); // the middle of -144..16 is the most common height
+        assertEquals(0, triangle.at(16), 1e-9);
+        assertEquals(5.5, triangle.at(-24), 1e-9);
+        assertEquals(0, triangle.at(17), 1e-9);
+        Generation.Spread uniform = new Generation.Spread("uniform", -64, -4, 2);
+        assertEquals(2, uniform.at(-30), 1e-9);
+        assertEquals(0, uniform.at(0), 1e-9);
+    }
+
+    @Test
     void bookFitsScreen() {
         BookLayout small = BookLayout.fit(320, 240, 9, 10, true); // smallest window at GUI scale
         assertEquals(142, small.pageWidth());

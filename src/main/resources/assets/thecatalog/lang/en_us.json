@@ -1392,5 +1392,11 @@
   "thecatalog.worldgen.minecraft.nether_quartz_ore": "Nether, all biomes. Twice as common in basalt deltas.\nHeight: Y 10 to 117.\nSpread evenly through the netherrack.",
   "thecatalog.worldgen.minecraft.ancient_debris": "Nether, all biomes.\nHeight: Y 8 to 119.\nMost common: around Y 15; never exposed to air, so dig or blow up tunnels.",
   "thecatalog.worldgen.minecraft.raw_iron_block": "Overworld, all biomes.\nHeight: Y -60 to -8, inside large iron ore veins.\nThe veins are long ribbons of tuff mixed with iron ore.",
-  "thecatalog.worldgen.minecraft.raw_copper_block": "Overworld, all biomes.\nHeight: Y 0 to 50, inside large copper ore veins.\nThe veins are long ribbons of granite mixed with copper ore."
+  "thecatalog.worldgen.minecraft.raw_copper_block": "Overworld, all biomes.\nHeight: Y 0 to 50, inside large copper ore veins.\nThe veins are long ribbons of granite mixed with copper ore.",
+  "gui.thecatalog.all_biomes": "All biomes",
+  "gui.thecatalog.dimension.overworld": "Overworld",
+  "gui.thecatalog.dimension.the_nether": "Nether",
+  "gui.thecatalog.dimension.the_end": "The End",
+  "gui.thecatalog.gen_range": "Y %s to %s",
+  "gui.thecatalog.gen_peak": "most at Y %s"
 }
