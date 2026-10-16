@@ -200,7 +200,13 @@ public class CatalogScreen extends Screen {
 
     @SuppressWarnings("unchecked")
     private <T> T cached(Object key, Supplier<T> compute) {
-        return (T) cache.computeIfAbsent(key, k -> compute.get());
+        // not computeIfAbsent: computing one value reads others (pages -> categories -> recipes), which would modify the map mid-call
+        Object value = cache.get(key);
+        if (value == null) {
+            value = compute.get();
+            cache.put(key, value);
+        }
+        return (T) value;
     }
 
     private CatalogIndex.Tab tab(IndexView v) {
