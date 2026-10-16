@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.aydep.thecatalog.OreGeneration;
 import org.junit.jupiter.api.Test;
 
 class CatalogLogicTest {
@@ -26,14 +27,18 @@ class CatalogLogicTest {
 
     @Test
     void oreSpreads() {
-        Generation.Spread triangle = new Generation.Spread("triangle", -144, 16, 11);
+        OreGeneration.Spread triangle = new OreGeneration.Spread("trapezoid", -144, 16, 11, 0);
         assertEquals(11, triangle.at(-64), 1e-9); // the middle of -144..16 is the most common height
         assertEquals(0, triangle.at(16), 1e-9);
         assertEquals(5.5, triangle.at(-24), 1e-9);
         assertEquals(0, triangle.at(17), 1e-9);
-        Generation.Spread uniform = new Generation.Spread("uniform", -64, -4, 2);
+        OreGeneration.Spread uniform = new OreGeneration.Spread("uniform", -64, -4, 2, 0);
         assertEquals(2, uniform.at(-30), 1e-9);
         assertEquals(0, uniform.at(0), 1e-9);
+        OreGeneration.Spread plateau = new OreGeneration.Spread("trapezoid", 0, 100, 4, 20); // flat for 20 blocks around 50
+        assertEquals(4, plateau.at(45), 1e-9);
+        assertEquals(4, plateau.at(60), 1e-9);
+        assertEquals(2, plateau.at(80), 1e-9);
     }
 
     @Test

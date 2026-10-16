@@ -331,7 +331,7 @@ public class CatalogScreen extends Screen {
             if (ClientConfig.SHOW_MOD_NAME.get()) lines.add(Component.literal(CatalogIndex.modName(CatalogIndex.modId(hovered))).withStyle(ChatFormatting.BLUE, ChatFormatting.ITALIC));
             g.renderTooltip(font, lines, hovered.getTooltipImage(), hovered, mouseX, mouseY);
         } else if (hoveredText != null) {
-            g.renderTooltip(font, hoveredText, mouseX, mouseY);
+            g.renderTooltip(font, font.split(hoveredText, 220), mouseX, mouseY);
         }
     }
 
@@ -615,6 +615,8 @@ public class CatalogScreen extends Screen {
     private void drawGeneration(GuiGraphics g, Generation gen, int x, int y, int width, int mouseX, int mouseY) {
         g.renderItem(gen.dimensionIcon(), x, y);
         g.drawString(font, trim(gen.where(), width - 20), x + 20, y + 4, INK, false);
+        Component biomes = gen.biomeList();
+        if (biomes != null && inside(mouseX, mouseY, x, y, width, 16)) hoveredText = biomes;
         int top = gen.chartTop(), bottom = gen.chartBottom(), chartTop = y + Generation.HEADER + Generation.GAP, h = Generation.CHART;
         int axis = x + 24, plotX = axis + 6, plotW = width - (plotX - x) - 20;
         double max = 0;

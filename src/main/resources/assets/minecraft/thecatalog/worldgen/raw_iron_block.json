@@ -1,0 +1,12 @@
+{
+  "dimension": "minecraft:overworld",
+  "color": "#C9905F",
+  "spreads": [
+    {
+      "shape": "uniform",
+      "min": -60,
+      "max": -8,
+      "weight": 1
+    }
+  ]
+}

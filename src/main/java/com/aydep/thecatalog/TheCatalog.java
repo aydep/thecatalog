@@ -1,5 +1,6 @@
 package com.aydep.thecatalog;
 
+import com.google.gson.Gson;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.CreativeModeTabs;
@@ -12,7 +13,10 @@ import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.common.ModConfigSpec;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.BuildCreativeModeTabContentsEvent;
+import net.neoforged.neoforge.event.OnDatapackSyncEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
@@ -20,6 +24,7 @@ import net.neoforged.neoforge.registries.DeferredRegister;
 public class TheCatalog {
     public static final String MODID = "thecatalog";
     private static final String RECEIVED_TAG = MODID + ":received";
+    private static final Gson GSON = new Gson();
 
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(MODID);
     public static final DeferredItem<CatalogItem> CATALOG =
@@ -36,6 +41,20 @@ public class TheCatalog {
         modBus.addListener(TheCatalog::addToCreativeTab);
         container.registerConfig(ModConfig.Type.COMMON, CONFIG_SPEC);
         NeoForge.EVENT_BUS.addListener(TheCatalog::giveOnFirstJoin);
+        modBus.addListener(TheCatalog::registerPayloads);
+        NeoForge.EVENT_BUS.addListener(TheCatalog::sendOreGeneration);
+    }
+
+    private static void registerPayloads(RegisterPayloadHandlersEvent event) {
+        // the handler only runs on the client, so the client class is never loaded on a dedicated server
+        event.registrar("1").playToClient(GenerationPayload.TYPE, GenerationPayload.STREAM_CODEC,
+                (payload, context) -> com.aydep.thecatalog.client.Generation.receive(payload.json()));
+    }
+
+    /** Fires when a player joins and after /reload: send them where every ore generates. */
+    private static void sendOreGeneration(OnDatapackSyncEvent event) {
+        GenerationPayload payload = new GenerationPayload(GSON.toJson(OreGeneration.scan(event.getPlayerList().getServer())));
+        event.getRelevantPlayers().forEach(player -> PacketDistributor.sendToPlayer(player, payload));
     }
 
     private static void addToCreativeTab(BuildCreativeModeTabContentsEvent event) {
