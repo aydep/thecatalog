@@ -52,6 +52,7 @@ public final class CatalogClient {
 
     @SubscribeEvent
     static void onTick(ClientTickEvent.Post event) {
+        CatalogIndex.tick(Minecraft.getInstance());
         while (OPEN.consumeClick()) {
             if (hasBook()) open();
         }
@@ -72,17 +73,17 @@ public final class CatalogClient {
 
     @SubscribeEvent
     static void onRecipes(RecipesUpdatedEvent event) {
-        CatalogIndex.invalidate();
+        CatalogIndex.markDirty();
     }
 
     @SubscribeEvent
     static void onTags(TagsUpdatedEvent event) {
-        CatalogIndex.invalidate();
+        CatalogIndex.markDirty();
     }
 
     @SubscribeEvent
     static void onLogout(ClientPlayerNetworkEvent.LoggingOut event) {
-        CatalogIndex.invalidate();
+        CatalogIndex.clear();
         CatalogScreen.forget();
     }
 }

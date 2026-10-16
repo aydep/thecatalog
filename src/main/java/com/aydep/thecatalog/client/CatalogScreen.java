@@ -62,7 +62,7 @@ public class CatalogScreen extends Screen {
     private static int lastTab; // the item grid's bookmark, for searches typed on a recipe page
 
     private final @Nullable Screen parent;
-    private final CatalogIndex index = CatalogIndex.get();
+    private @Nullable CatalogIndex index = CatalogIndex.current(); // null until the first background build is done
     private final Map<Object, Object> cache = new HashMap<>();
     private final List<Hotspot> hotspots = new ArrayList<>();
     private View view;
@@ -78,6 +78,7 @@ public class CatalogScreen extends Screen {
     public CatalogScreen(@Nullable Screen parent, @Nullable RecipeView start) {
         super(Component.translatable("item.thecatalog.catalog"));
         this.parent = parent;
+        CatalogIndex.requestIfMissing();
         if (start != null) {
             history.push(lastView);
             lastView = start;
@@ -114,8 +115,19 @@ public class CatalogScreen extends Screen {
             }
         });
         addRenderableWidget(search);
-        if (view.spread() >= spreads(view)) setView(withSpread(view, spreads(view) - 1));
+        if (index != null) clampSpread();
         updateSearch();
+    }
+
+    /** True once the index exists; picks it up the moment the background build finishes. */
+    private boolean ready() {
+        if (index == null && (index = CatalogIndex.current()) != null) clampSpread();
+        return index != null;
+    }
+
+    /** After a resize or a new index there may be fewer pages than the page we were on. */
+    private void clampSpread() {
+        if (view.spread() >= spreads(view)) setView(withSpread(view, spreads(view) - 1));
     }
 
     // ---- navigation ----
@@ -155,6 +167,7 @@ public class CatalogScreen extends Screen {
     }
 
     private void turnPage(int direction) {
+        if (!ready()) return;
         int spread = Math.clamp(view.spread() + direction, 0, spreads(view) - 1);
         if (spread != view.spread()) flipTo(withSpread(view, spread), direction > 0);
     }
@@ -187,14 +200,17 @@ public class CatalogScreen extends Screen {
 
     private List<ItemStack> items(IndexView v) {
         return cached(List.of(v.tab(), v.query()), () -> {
-            List<ItemStack> items = tab(v).items();
+            CatalogIndex.Tab tab = tab(v);
             boolean hideUncraftable = ClientConfig.HIDE_ITEMS_WITHOUT_RECIPES.get();
-            if (v.query().isBlank() && !hideUncraftable) return items;
-            return items.stream().filter(s -> {
-                if (hideUncraftable && index.recipesFor(s).isEmpty()) return false;
+            if (v.query().isBlank() && !hideUncraftable) return tab.items();
+            List<ItemStack> found = new ArrayList<>();
+            for (int i = 0; i < tab.items().size(); i++) {
+                ItemStack s = tab.items().get(i);
                 String mod = CatalogIndex.modId(s);
-                return CatalogSearch.matches(v.query(), s.getHoverName().getString(), mod, CatalogIndex.modName(mod));
-            }).toList();
+                if (CatalogSearch.matches(v.query(), tab.names().get(i), mod, CatalogIndex.modName(mod))
+                        && !(hideUncraftable && index.recipesFor(s).isEmpty())) found.add(s);
+            }
+            return found;
         });
     }
 
@@ -257,10 +273,16 @@ public class CatalogScreen extends Screen {
         // search tab, cover, then bookmarks lying on it, then the pages on top of the bookmarks' inner ends
         g.blitSprite(SEARCH_TAB, bx + SEARCH_TAB_INSET, by + ph - 8, pw - 2 * SEARCH_TAB_INSET, 8 + BookLayout.SEARCH_HEIGHT);
         g.blitSprite(COVER, bx - COVER_BORDER_X, by - COVER_BORDER_Y, 2 * pw + 2 * COVER_BORDER_X, ph + 2 * COVER_BORDER_Y);
-        drawTabs(g, mouseX, mouseY);
+        boolean ready = ready();
+        if (ready) drawTabs(g, mouseX, mouseY);
         g.blitSprite(PAGE_LEFT, bx, by, pw, ph);
         g.blitSprite(PAGE_RIGHT, bx + pw, by, pw, ph);
         g.blitSprite(SEARCH_ICON, search.getX() - 13, search.getY() - 1, 9, 9);
+        if (!ready) {
+            Component text = Component.translatable("gui.thecatalog.indexing");
+            g.drawString(font, text, bx + (pw - font.width(text)) / 2, by + ph / 2 - 4, FAINT_INK, false);
+            return;
+        }
         if (flipFrom == null) {
             drawPage(g, view, 0, mouseX, mouseY);
             drawPage(g, view, 1, mouseX, mouseY);

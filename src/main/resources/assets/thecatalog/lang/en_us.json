@@ -26,5 +26,6 @@
   "thecatalog.configuration.pauseGame": "Pause game while open",
   "thecatalog.configuration.requireBookInInventory": "Require book in inventory",
   "thecatalog.configuration.showModName": "Show mod name in tooltips",
-  "thecatalog.configuration.hideItemsWithoutRecipes": "Hide items without recipes"
+  "thecatalog.configuration.hideItemsWithoutRecipes": "Hide items without recipes",
+  "gui.thecatalog.indexing": "Indexing recipes…"
 }

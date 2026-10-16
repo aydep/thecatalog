@@ -38,5 +38,6 @@
   "thecatalog.configuration.requireBookInInventory.tooltip": "Клавиши открытия и рецептов/применений работают, только если Каталог в инвентаре.",
   "thecatalog.configuration.showModName.tooltip": "Показывать название мода под подсказками предметов в книге.",
   "thecatalog.configuration.hideItemsWithoutRecipes.tooltip": "Не показывать в сетке предметы без рецепта.",
-  "thecatalog.configuration.giveOnFirstJoin.tooltip": "Выдавать каждому игроку один Каталог при первом входе в мир."
+  "thecatalog.configuration.giveOnFirstJoin.tooltip": "Выдавать каждому игроку один Каталог при первом входе в мир.",
+  "gui.thecatalog.indexing": "Индексация рецептов…"
 }
