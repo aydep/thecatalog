@@ -80,7 +80,7 @@ def cover(x, y):
 
 
 def ribbon(c):
-    """32x22 bookmark ribbon for the left edge: swallowtail notch on the outer (left) end; the right 4px sit under the page."""
+    """40x22 bookmark ribbon for the left edge: swallowtail notch on the outer (left) end; the right 12px sit under the page."""
     def px(x, y):
         depth = 5 - int(abs(y - 10.5) / 2.2)
         if x < depth: return CLEAR
@@ -239,13 +239,13 @@ left = page(stitched=True)
 sprite("page_left", 48, 48, left, nine_slice=12)
 sprite("page_right", 48, 48, mirrored(page(stitched=False), 48), nine_slice=12)
 sprite("cover", 32, 32, cover, nine_slice=8)
-sprite("tab", 32, 22, ribbon(PURPLE))
-sprite("tab_selected", 32, 22, ribbon(PURPLE_SEL))
-sprite("tab_right", 32, 22, mirrored(ribbon(PURPLE), 32))
-sprite("tab_right_selected", 32, 22, mirrored(ribbon(PURPLE_SEL), 32))
-# category bookmarks along the top edge: the side ribbon stood upright, notch on top, bottom 4px under the page
-sprite("tab_top", 22, 32, lambda x, y: ribbon(PURPLE)(y, x))
-sprite("tab_top_selected", 22, 32, lambda x, y: ribbon(PURPLE_SEL)(y, x))
+sprite("tab", 40, 22, ribbon(PURPLE))
+sprite("tab_selected", 40, 22, ribbon(PURPLE_SEL))
+sprite("tab_right", 40, 22, mirrored(ribbon(PURPLE), 40))
+sprite("tab_right_selected", 40, 22, mirrored(ribbon(PURPLE_SEL), 40))
+# category bookmarks along the top edge: the side ribbon stood upright, notch on top, bottom 12px under the page
+sprite("tab_top", 22, 40, lambda x, y: ribbon(PURPLE)(y, x))
+sprite("tab_top_selected", 22, 40, lambda x, y: ribbon(PURPLE_SEL)(y, x))
 sprite("tab_prev", 7, 12, outlined(GOLD_LIGHT, triangle(7, 12, "left"), 7, 12))
 sprite("tab_next", 7, 12, outlined(GOLD_LIGHT, triangle(7, 12, "right"), 7, 12))
 sprite("tab_up", 12, 7, outlined(GOLD_LIGHT, triangle(12, 7, "up"), 12, 7))

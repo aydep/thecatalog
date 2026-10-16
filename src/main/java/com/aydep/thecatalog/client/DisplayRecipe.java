@@ -22,6 +22,7 @@ import net.minecraft.world.item.crafting.ShapedRecipe;
 import net.minecraft.world.item.crafting.SmithingRecipe;
 import net.minecraft.world.item.crafting.SmithingRecipeInput;
 import net.minecraft.world.item.crafting.SmithingTrimRecipe;
+import net.minecraft.world.item.trading.MerchantOffer;
 import org.jetbrains.annotations.Nullable;
 
 /** A recipe laid out for a book page: item slots and pictures at fixed spots inside a width x height box. */
@@ -29,6 +30,7 @@ public final class DisplayRecipe implements RecipeEntry {
     /** Space above the recipe panel. (The category name is on the bookmark, not above each recipe.) */
     public static final int CAPTION = 2;
     private static final ResourceLocation BREWING = ResourceLocation.withDefaultNamespace("brewing");
+    private static final ResourceLocation TRADING = ResourceLocation.fromNamespaceAndPath(TheCatalog.MODID, "trading");
     private static final int S = BookLayout.SLOT;
     /** Padding between the input panel's edge and its slots. */
     public static final int PAD = 3;
@@ -127,6 +129,22 @@ public final class DisplayRecipe implements RecipeEntry {
         DisplayRecipe d = simple(Items.BREWING_STAND.getDescription(), List.of(List.of(input), List.of(reagent)), output, List.of(output));
         d.categoryId = BREWING;
         d.icon = new ItemStack(Items.BREWING_STAND);
+        return d;
+    }
+
+    /** A villager or wandering trader offer: costs on the left, the result on the right, who sells it below. */
+    static DisplayRecipe trade(MerchantOffer offer, Component trader) {
+        List<List<ItemStack>> costs = new ArrayList<>();
+        costs.add(List.of(offer.getCostA()));
+        if (!offer.getCostB().isEmpty()) costs.add(List.of(offer.getCostB()));
+        ItemStack result = offer.getResult();
+        DisplayRecipe d = grid(Component.translatable("gui.thecatalog.trading"), costs, costs.size(), result, List.of(result));
+        d.categoryId = TRADING;
+        d.icon = new ItemStack(Items.EMERALD);
+        d.note = trader;
+        d.noteX = 0;
+        d.noteY = d.height + 2;
+        d.height += 11;
         return d;
     }
 

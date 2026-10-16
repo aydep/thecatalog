@@ -13,10 +13,10 @@ and `height` there too.
 | `cover.png` | 32×32 (9-slice, 8px border) | Leather cover behind the pages. It shows 7px left/right and 6px top/bottom of the pages. |
 | `page_left.png` | 48×48 (9-slice, 12px border) | Left page: outer edge on the left, spine gutter with stitches on the right. The stitch pattern repeats every 6px. |
 | `page_right.png` | 48×48 (9-slice, 12px border) | Right page, mirrored, without stitches. |
-| `tab.png` | 32×22 | Bookmark ribbon for bookmarks on the left: swallowtail notch on the outer (left) end; the right 4px are hidden under the page. The item icon is drawn at x=8, y=3. |
-| `tab_selected.png` | 32×22 | The open bookmark. It's drawn 6px further out. |
-| `tab_right.png`, `tab_right_selected.png` | 32×22 | The same two, mirrored, for bookmarks on the right (config). |
-| `tab_top.png`, `tab_top_selected.png` | 22×32 | Recipe-category bookmarks along the top edge (shown on recipe pages): notch on top, bottom 4px hidden under the page. Icon at x=3, y=6. The open one is drawn 6px higher. |
+| `tab.png` | 40×22 | Bookmark ribbon for bookmarks on the left: swallowtail notch on the outer (left) end; the right 12px are hidden under the page (so the open one, shifted 6px out, still reaches under it). The item icon is drawn at x=8, y=3. |
+| `tab_selected.png` | 40×22 | The open bookmark. It's drawn 6px further out. |
+| `tab_right.png`, `tab_right_selected.png` | 40×22 | The same two, mirrored, for bookmarks on the right (config). |
+| `tab_top.png`, `tab_top_selected.png` | 22×40 | Recipe-category bookmarks along the top edge of the right page: notch on top, bottom 12px hidden under the page. Icon at x=3, y=6. The open one is drawn 6px higher. |
 | `tab_prev.png`, `tab_next.png` | 7×12 | Arrows that scroll the category bookmarks left / right. |
 | `tab_up.png`, `tab_down.png` | 12×7 | Arrows that scroll the bookmark column to the previous / next group. |
 | `page_forward.png` / `_highlighted` | 18×10 | Next page arrow (normal / mouse over). |

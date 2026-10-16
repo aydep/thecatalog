@@ -23,12 +23,19 @@ import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
+import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.npc.Villager;
+import net.minecraft.world.entity.npc.VillagerTrades;
+import net.minecraft.world.entity.npc.WanderingTrader;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.alchemy.PotionBrewing;
 import net.minecraft.world.item.crafting.RecipeHolder;
+import net.minecraft.world.item.trading.MerchantOffer;
 import net.neoforged.fml.ModList;
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
@@ -56,6 +63,8 @@ public final class CatalogIndex {
     public final List<Tab> tabs = new ArrayList<>();
     private final Map<Item, List<DisplayRecipe>> byResult = new HashMap<>();
     private final Map<Item, List<DisplayRecipe>> byInput = new HashMap<>();
+    private final Map<Item, List<DisplayRecipe>> tradesByResult = new HashMap<>();
+    private final Map<Item, List<DisplayRecipe>> tradesByCost = new HashMap<>();
     private int recipeCount;
 
     /** The latest finished index, or null while the first one is still being built. */
@@ -109,8 +118,9 @@ public final class CatalogIndex {
         }
         List<RecipeHolder<?>> recipes = List.copyOf(level.getRecipeManager().getRecipes());
         PotionBrewing brewing = level.potionBrewing();
+        List<DisplayRecipe> trades = collectTrades(level); // needs trader entities, so it runs here on the main thread
 
-        CompletableFuture.supplyAsync(() -> new CatalogIndex(all, creativeTabs, tabItems, recipes, brewing, registries), Util.backgroundExecutor())
+        CompletableFuture.supplyAsync(() -> new CatalogIndex(all, creativeTabs, tabItems, recipes, brewing, registries, trades), Util.backgroundExecutor())
                 .whenCompleteAsync((index, error) -> {
                     if (build != generation) return; // a newer build started, or the player left
                     building = false;
@@ -124,7 +134,7 @@ public final class CatalogIndex {
     }
 
     private CatalogIndex(List<ItemStack> all, List<CreativeModeTab> creativeTabs, Map<CreativeModeTab, List<ItemStack>> tabItems,
-                         Collection<RecipeHolder<?>> recipes, PotionBrewing brewing, RegistryAccess registries) {
+                         Collection<RecipeHolder<?>> recipes, PotionBrewing brewing, RegistryAccess registries, List<DisplayRecipe> trades) {
         addTabs(all, creativeTabs, tabItems);
         for (RecipeHolder<?> holder : recipes) {
             try {
@@ -134,6 +144,44 @@ public final class CatalogIndex {
             }
         }
         addBrewing(brewing, all);
+        for (DisplayRecipe trade : trades) {
+            for (ItemStack result : trade.results) tradesByResult.computeIfAbsent(result.getItem(), k -> new ArrayList<>()).add(trade);
+            for (DisplayRecipe.Slot cost : trade.inputs) {
+                for (ItemStack stack : cost.stacks()) tradesByCost.computeIfAbsent(stack.getItem(), k -> new ArrayList<>()).add(trade);
+            }
+        }
+    }
+
+    /**
+     * Every villager and wandering trader offer, sampled once with a fixed seed (some offers are randomized).
+     * Offers that need a server (treasure maps) or fail in a modded listing are skipped.
+     */
+    private static List<DisplayRecipe> collectTrades(ClientLevel level) {
+        List<DisplayRecipe> trades = new ArrayList<>();
+        RandomSource random = RandomSource.create(0);
+        Villager villager = new Villager(EntityType.VILLAGER, level);
+        VillagerTrades.TRADES.forEach((profession, levels) -> {
+            ResourceLocation id = BuiltInRegistries.VILLAGER_PROFESSION.getKey(profession);
+            for (int lvl : levels.keySet().toIntArray()) {
+                Component who = Component.translatable("entity." + id.getNamespace() + ".villager." + id.getPath())
+                        .append(" · ").append(Component.translatable("merchant.level." + lvl));
+                for (VillagerTrades.ItemListing listing : levels.get(lvl)) addTrade(trades, listing, villager, random, who);
+            }
+        });
+        WanderingTrader wanderer = new WanderingTrader(EntityType.WANDERING_TRADER, level);
+        for (VillagerTrades.ItemListing[] listings : VillagerTrades.WANDERING_TRADER_TRADES.values()) {
+            for (VillagerTrades.ItemListing listing : listings) addTrade(trades, listing, wanderer, random, EntityType.WANDERING_TRADER.getDescription());
+        }
+        return trades;
+    }
+
+    private static void addTrade(List<DisplayRecipe> trades, VillagerTrades.ItemListing listing, Entity trader, RandomSource random, Component who) {
+        try {
+            MerchantOffer offer = listing.getOffer(trader, random);
+            if (offer != null && !offer.getResult().isEmpty()) trades.add(DisplayRecipe.trade(offer, who));
+        } catch (RuntimeException e) {
+            LOGGER.debug("The Catalog skipped a trade: {}", e.toString());
+        }
     }
 
     /** "All", then the vanilla creative tabs, then one tab per mod sorted by name. */
@@ -195,6 +243,12 @@ public final class CatalogIndex {
 
     public List<DisplayRecipe> recipesFor(ItemStack stack) {
         return byResult.getOrDefault(stack.getItem(), List.of()).stream().filter(r -> r.produces(stack)).toList();
+    }
+
+    /** Trades that give the stack, or (uses) that take it as payment. */
+    public List<DisplayRecipe> tradesFor(ItemStack stack, boolean uses) {
+        Map<Item, List<DisplayRecipe>> map = uses ? tradesByCost : tradesByResult;
+        return map.getOrDefault(stack.getItem(), List.of()).stream().filter(t -> uses ? t.uses(stack) : t.produces(stack)).toList();
     }
 
     public List<DisplayRecipe> usesFor(ItemStack stack) {

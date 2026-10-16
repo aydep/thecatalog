@@ -53,7 +53,10 @@ public class CatalogScreen extends Screen {
             BACK = sprite("back"), BACK_HOT = sprite("back_highlighted");
     private static final int INK = 0xFF4A3524, FAINT_INK = 0xFF9A8462, HOVER = 0x304A3524, BRACE = 0xFFC4A877;
     private static final int SEARCH_TEXT = 0xFF5A4330, SEARCH_HINT = 0xFFB09A74, COVER_BORDER_X = 7, COVER_BORDER_Y = 6;
-    private static final int TOP_TAB_WIDTH = 22, TOP_TAB_HEIGHT = 32, TOP_TAB_STEP = 23;
+    // Bookmark sprites are longer than what shows: TAB_TUCK pixels sit under the page, so the open bookmark,
+    // drawn TAB_SHIFT further out, still reaches under it.
+    private static final int TAB_SPRITE = 40, TAB_TUCK = 12, TAB_SHIFT = 6;
+    private static final int TOP_TAB_WIDTH = 22, TOP_TAB_STEP = 23;
     private static final int SEARCH_TAB_INSET = 10, TAB_HEIGHT = 22, RECIPE_HEADER = 34, RECIPE_GAP = 6;
 
     sealed interface View permits IndexView, RecipeView {
@@ -238,9 +241,17 @@ public class CatalogScreen extends Screen {
     /** The view's recipes split into pages; left pages leave room for the header. */
     /** Recipes from JEI when it is installed (every mod's JEI plugin), otherwise The Catalog's own index. */
     private List<? extends RecipeEntry> lookup(RecipeView v) {
+        List<RecipeEntry> entries = new ArrayList<>();
         ExternalRecipes.Source external = ExternalRecipes.active();
-        if (external != null) return external.lookup(v.stack(), v.uses());
-        return v.uses() ? index.usesFor(v.stack()) : index.recipesFor(v.stack());
+        if (external != null) entries.addAll(external.lookup(v.stack(), v.uses()));
+        else entries.addAll(v.uses() ? index.usesFor(v.stack()) : index.recipesFor(v.stack()));
+        // The Catalog's own extras, shown with or without JEI
+        entries.addAll(index.tradesFor(v.stack(), v.uses()));
+        if (!v.uses()) {
+            InfoEntry worldgen = InfoEntry.worldgen(v.stack());
+            if (worldgen != null) entries.add(worldgen);
+        }
+        return entries;
     }
 
     private List<? extends RecipeEntry> allRecipes(RecipeView v) {
@@ -375,8 +386,9 @@ public class CatalogScreen extends Screen {
         List<CatalogIndex.Tab> tabs = index.tabs;
         boolean left = tabsLeft();
         int pw = layout.pageWidth(), top = layout.y() + 12;
-        int tx = left ? layout.x() - BookLayout.TAB_WIDTH + 4 : layout.x() + 2 * pw - 4;
-        int outward = left ? -6 : 6, visibleX = left ? tx : tx + 4; // visibleX: the part of the tab not under the page
+        int bookLeft = layout.x(), bookRight = layout.x() + 2 * pw;
+        int tx = left ? bookLeft - TAB_SPRITE + TAB_TUCK : bookRight - TAB_TUCK;
+        int outward = left ? -TAB_SHIFT : TAB_SHIFT, visibleX = left ? tx : bookRight; // visibleX: where the shown part starts
         int visible = (layout.pageHeight() - 24) / TAB_HEIGHT;
         tabScroll = Math.clamp(tabScroll, 0, Math.max(0, tabs.size() - visible));
         if (tabScroll > 0) {
@@ -389,11 +401,13 @@ public class CatalogScreen extends Screen {
         for (int i = tabScroll; i < Math.min(tabs.size(), tabScroll + visible); i++) {
             int x = tx + (i == current ? outward : 0), y = top + (i - tabScroll) * TAB_HEIGHT;
             ResourceLocation sprite = left ? (i == current ? TAB_SELECTED : TAB) : (i == current ? TAB_RIGHT_SELECTED : TAB_RIGHT);
-            g.blitSprite(sprite, x, y, BookLayout.TAB_WIDTH, TAB_HEIGHT);
-            g.renderItem(tabs.get(i).icon(), x + 8, y + 3);
-            if (inside(mouseX, mouseY, x, y, BookLayout.TAB_WIDTH, TAB_HEIGHT)) hoveredText = tabs.get(i).name();
+            g.blitSprite(sprite, x, y, TAB_SPRITE, TAB_HEIGHT);
+            g.renderItem(tabs.get(i).icon(), left ? x + 8 : x + TAB_TUCK + 4, y + 3);
+            // only the part outside the book reacts to the mouse
+            int hx = left ? x : bookRight, hw = left ? bookLeft - x : x + TAB_SPRITE - bookRight;
+            if (inside(mouseX, mouseY, hx, y, hw, TAB_HEIGHT)) hoveredText = tabs.get(i).name();
             int tab = i;
-            hotspots.add(new Hotspot(x, y, BookLayout.TAB_WIDTH, TAB_HEIGHT, () -> selectTab(tab)));
+            hotspots.add(new Hotspot(hx, y, hw, TAB_HEIGHT, () -> selectTab(tab)));
         }
     }
 
@@ -418,12 +432,12 @@ public class CatalogScreen extends Screen {
             button(g, TAB_NEXT, TAB_NEXT, right + 3, arrowY, 7, 12, mouseX, mouseY, () -> categoryScroll += visible);
         }
         for (int i = categoryScroll; i < Math.min(categories.size(), categoryScroll + visible); i++) {
-            int x = left + (i - categoryScroll) * TOP_TAB_STEP, y = by - TOP_TAB_HEIGHT + 4 - (i == current ? 6 : 0);
-            g.blitSprite(i == current ? TAB_TOP_SELECTED : TAB_TOP, x, y, TOP_TAB_WIDTH, TOP_TAB_HEIGHT);
+            int x = left + (i - categoryScroll) * TOP_TAB_STEP, y = by - TAB_SPRITE + TAB_TUCK - (i == current ? TAB_SHIFT : 0);
+            g.blitSprite(i == current ? TAB_TOP_SELECTED : TAB_TOP, x, y, TOP_TAB_WIDTH, TAB_SPRITE);
             categories.get(i).drawCategoryIcon(g, x + 3, y + 6);
-            if (inside(mouseX, mouseY, x, y, TOP_TAB_WIDTH, TOP_TAB_HEIGHT - 4)) hoveredText = categories.get(i).categoryTitle();
+            if (inside(mouseX, mouseY, x, y, TOP_TAB_WIDTH, by - y)) hoveredText = categories.get(i).categoryTitle();
             int category = i;
-            hotspots.add(new Hotspot(x, y, TOP_TAB_WIDTH, TOP_TAB_HEIGHT - 4, () -> selectCategory(v, category)));
+            hotspots.add(new Hotspot(x, y, TOP_TAB_WIDTH, by - y, () -> selectCategory(v, category)));
         }
     }
 
@@ -486,6 +500,7 @@ public class CatalogScreen extends Screen {
         for (RecipeEntry entry : pages.get(page)) {
             if (entry instanceof DisplayRecipe recipe) drawRecipe(g, recipe, x, y, mouseX, mouseY);
             else if (entry instanceof ExternalRecipes.Entry external) drawExternal(g, external, x, y, width, mouseX, mouseY);
+            else if (entry instanceof InfoEntry info) drawInfo(g, info, x, y, width, mouseX, mouseY);
             y += entry.pageHeight(width) + RECIPE_GAP;
         }
     }
@@ -508,7 +523,8 @@ public class CatalogScreen extends Screen {
             if (stack.isDamageableItem()) sentence(text, Component.translatable("gui.thecatalog.desc.durability", stack.getMaxDamage()));
             FoodProperties food = stack.get(DataComponents.FOOD);
             if (food != null) sentence(text, Component.translatable("gui.thecatalog.desc.food", food.nutrition()));
-            int made = allRecipes(new RecipeView(stack, false, 0, 0)).size(), used = allRecipes(new RecipeView(stack, true, 0, 0)).size();
+            int made = (int) allRecipes(new RecipeView(stack, false, 0, 0)).stream().filter(e -> !(e instanceof InfoEntry)).count();
+            int used = allRecipes(new RecipeView(stack, true, 0, 0)).size();
             sentence(text, made > 0 ? Component.translatable("gui.thecatalog.desc.recipes", made) : Component.translatable("gui.thecatalog.desc.no_recipes"));
             sentence(text, used > 0 ? Component.translatable("gui.thecatalog.desc.uses", used) : Component.translatable("gui.thecatalog.desc.no_uses"));
             return text;
@@ -577,6 +593,14 @@ public class CatalogScreen extends Screen {
             hoveredExternal = entry;
             hovered = entry.itemAt(mouseX, mouseY);
         }
+    }
+
+    /** An item in a slot box with text beside it (e.g. where an ore generates). */
+    private void drawInfo(GuiGraphics g, InfoEntry info, int x, int y, int width, int mouseX, int mouseY) {
+        g.blitSprite(SLOT_BOX, x, y, SLOT, SLOT);
+        drawStack(g, info.stack, x, y, mouseX, mouseY);
+        List<FormattedCharSequence> lines = font.split(info.text, width - InfoEntry.TEXT_X);
+        for (int i = 0; i < lines.size(); i++) g.drawString(font, lines.get(i), x + InfoEntry.TEXT_X, y + 1 + i * font.lineHeight, INK, false);
     }
 
     /** A "}" as tall as the input panel, pointing at the chevron. */
