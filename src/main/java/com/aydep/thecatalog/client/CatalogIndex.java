@@ -61,6 +61,8 @@ public final class CatalogIndex {
     private static boolean building;
 
     public final List<Tab> tabs = new ArrayList<>();
+    /** The Natural Blocks tab: found in the world as they are, so recipe trees don't break them down. */
+    public final Set<Item> natural = new HashSet<>();
     private final Map<Item, List<DisplayRecipe>> byResult = new HashMap<>();
     private final Map<Item, List<DisplayRecipe>> byInput = new HashMap<>();
     private final Map<Item, List<DisplayRecipe>> tradesByResult = new HashMap<>();
@@ -136,6 +138,7 @@ public final class CatalogIndex {
     private CatalogIndex(List<ItemStack> all, List<CreativeModeTab> creativeTabs, Map<CreativeModeTab, List<ItemStack>> tabItems,
                          Collection<RecipeHolder<?>> recipes, PotionBrewing brewing, RegistryAccess registries, List<DisplayRecipe> trades) {
         addTabs(all, creativeTabs, tabItems);
+        tabItems.getOrDefault(BuiltInRegistries.CREATIVE_MODE_TAB.get(CreativeModeTabs.NATURAL_BLOCKS), List.of()).forEach(s -> natural.add(s.getItem()));
         for (RecipeHolder<?> holder : recipes) {
             try {
                 add(DisplayRecipe.of(holder, registries, all));

@@ -716,7 +716,7 @@ public class CatalogScreen extends Screen {
 
     /** Opens the item's recipe tree; from the side panel, in the full book (the tree needs the whole spread). */
     private void openTree(ItemStack stack) {
-        RecipeTree<TreeKey> tree = new RecipeTree<>(TreeKey.of(stack), this::treeSteps);
+        RecipeTree<TreeKey> tree = new RecipeTree<>(TreeKey.of(stack), this::treeSteps, key -> index.natural.contains(key.item()));
         if (tree.top() == null) return;
         TreeView next = new TreeView(tree, 0);
         if (compact) {

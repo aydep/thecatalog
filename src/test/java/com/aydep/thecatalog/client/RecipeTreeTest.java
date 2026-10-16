@@ -6,12 +6,15 @@ import com.aydep.thecatalog.client.RecipeTree.Amount;
 import com.aydep.thecatalog.client.RecipeTree.Step;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class RecipeTreeTest {
     private final Map<String, List<Step<String>>> recipes = new HashMap<>();
+    private final Set<String> natural = new HashSet<>();
 
     private void recipe(String output, int count, Object... inputs) {
         List<Amount<String>> list = new ArrayList<>();
@@ -20,7 +23,7 @@ class RecipeTreeTest {
     }
 
     private RecipeTree<String> tree(String root) {
-        return new RecipeTree<>(root, key -> recipes.getOrDefault(key, List.of()));
+        return new RecipeTree<>(root, key -> recipes.getOrDefault(key, List.of()), natural::contains);
     }
 
     @Test
@@ -63,6 +66,27 @@ class RecipeTreeTest {
         bars.cycle("ingot"); // from a block; the block is not made from ingots again inside its own branch
         assertEquals(List.of(new Amount<>("block", 1)), bars.totalCost());
         assertEquals(List.of(new Amount<>("ingot", 3)), bars.leftovers());
+    }
+
+    @Test
+    void shortestWayToWhatIsFoundInTheWorld() {
+        recipe("glass", 1, "framed_glass", 1); // a crafting recipe, so listed first
+        recipe("glass", 1, "sand", 1); // smelting
+        recipe("framed_glass", 1, "glass", 1);
+        recipe("sand", 1, "gravel", 1); // a mod's crushing
+        recipe("gravel", 1, "cobblestone", 1);
+        natural.addAll(List.of("sand", "gravel"));
+        recipe("bottle", 3, "glass", 3);
+        assertEquals(List.of(new Amount<>("sand", 3)), tree("bottle").totalCost());
+    }
+
+    @Test
+    void itemsOnlyMadeFromEachOtherAreBase() {
+        recipe("raw_iron", 9, "raw_iron_block", 1);
+        recipe("raw_iron_block", 1, "raw_iron", 9);
+        recipe("ingot", 1, "raw_iron", 1);
+        recipe("rail", 16, "ingot", 6);
+        assertEquals(List.of(new Amount<>("raw_iron", 6)), tree("rail").totalCost());
     }
 
     @Test
