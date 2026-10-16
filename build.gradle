@@ -123,6 +123,8 @@ dependencies {
     // JEI is optional: compiled against its API, and present in the dev game to test the integration.
     compileOnly "mezz.jei:jei-${minecraft_version}-common-api:${jei_version}"
     compileOnly "mezz.jei:jei-${minecraft_version}-neoforge-api:${jei_version}"
+    // the API can't hide JEI's item list, so the survival-mode hiding uses JEI's own on/off switch
+    compileOnly("mezz.jei:jei-${minecraft_version}-common:${jei_version}") { transitive = false }
     localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
 
     testImplementation platform('org.junit:junit-bom:5.10.2')
