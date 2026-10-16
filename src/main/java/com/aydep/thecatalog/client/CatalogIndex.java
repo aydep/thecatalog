@@ -16,10 +16,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.Util;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.resources.language.ClientLanguage;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTabs;
 import net.minecraft.world.item.Item;
@@ -35,8 +38,12 @@ import org.slf4j.Logger;
  * Built on a background thread whenever recipes or tags change, so opening the book never freezes the game.
  */
 public final class CatalogIndex {
-    /** {@code names} holds each item's lowercase display name, parallel to {@code items}, for searching. */
+    /** {@code names} holds each item's lowercase search text (see {@link #searchText}), parallel to {@code items}. */
     public record Tab(Component name, ItemStack icon, List<ItemStack> items, List<String> names) {}
+
+    /** Search always matches item names in these languages too, whatever language the game is set to. */
+    private static final List<String> SEARCH_LANGUAGES = List.of("en_us", "ru_ru");
+    private static volatile List<Language> searchLanguages = List.of();
 
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Map<String, String> MOD_NAMES = new ConcurrentHashMap<>();
@@ -54,6 +61,13 @@ public final class CatalogIndex {
     /** The latest finished index, or null while the first one is still being built. */
     public static @Nullable CatalogIndex current() {
         return current;
+    }
+
+    /** Loads the search languages; called on every resource reload, which includes changing the game's language. */
+    static void loadSearchLanguages(ResourceManager resources) {
+        searchLanguages = SEARCH_LANGUAGES.stream()
+                .map(code -> (Language) ClientLanguage.loadFrom(resources, List.of("en_us", code), false)) // en_us fills gaps, as in vanilla
+                .toList();
     }
 
     /** Recipes or tags changed (any thread); a rebuild starts on the next client tick. The old index stays usable until then. */
@@ -145,7 +159,15 @@ public final class CatalogIndex {
     }
 
     private static Tab tab(Component name, ItemStack icon, List<ItemStack> items) {
-        return new Tab(name, icon, items, items.stream().map(s -> s.getHoverName().getString().toLowerCase(Locale.ROOT)).toList());
+        List<Language> languages = searchLanguages;
+        return new Tab(name, icon, items, items.stream().map(s -> searchText(s, languages)).toList());
+    }
+
+    /** The item's displayed name (custom names included) plus its name in each search language, lowercase, one per line. */
+    static String searchText(ItemStack stack, List<Language> languages) {
+        StringBuilder text = new StringBuilder(stack.getHoverName().getString());
+        for (Language language : languages) text.append('\n').append(language.getOrDefault(stack.getDescriptionId()));
+        return text.toString().toLowerCase(Locale.ROOT);
     }
 
     private void addBrewing(PotionBrewing brewing, List<ItemStack> all) {

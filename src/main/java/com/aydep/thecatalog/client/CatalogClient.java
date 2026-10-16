@@ -78,10 +78,13 @@ public final class CatalogClient {
         CatalogIndex.markDirty();
     }
 
-    /** Item names are cached in the index for searching; changing the language reloads resources, so rebuild it then. */
+    /** Item names are cached in the index for searching; a resource reload (e.g. a language change) reloads them. */
     @SubscribeEvent
     static void onRegisterReloadListeners(RegisterClientReloadListenersEvent event) {
-        event.registerReloadListener((ResourceManagerReloadListener) manager -> CatalogIndex.markDirty());
+        event.registerReloadListener((ResourceManagerReloadListener) manager -> {
+            CatalogIndex.loadSearchLanguages(manager);
+            CatalogIndex.markDirty();
+        });
     }
 
     @SubscribeEvent

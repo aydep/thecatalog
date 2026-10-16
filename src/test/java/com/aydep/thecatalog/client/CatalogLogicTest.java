@@ -17,6 +17,11 @@ class CatalogLogicTest {
         assertTrue(CatalogSearch.matches("@farmer's tomato", "Tomato", "farmersdelight", "Farmer's Delight"));
         assertFalse(CatalogSearch.matches("@create oak", "Oak Planks", "minecraft", "Minecraft"));
         assertTrue(CatalogSearch.matches("ДУБ", "Дубовые доски", "minecraft", "Minecraft"));
+        // the index stores one name per language, one per line; any of them can match
+        String diamond = "алмаз\ndiamond\nалмаз";
+        assertTrue(CatalogSearch.matches("diamond", diamond, "minecraft", "Minecraft"));
+        assertTrue(CatalogSearch.matches("алмаз", diamond, "minecraft", "Minecraft"));
+        assertFalse(CatalogSearch.matches("iron", diamond, "minecraft", "Minecraft"));
     }
 
     @Test
