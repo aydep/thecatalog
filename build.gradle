@@ -32,6 +32,11 @@ repositories {
         url = "https://maven.blamejared.com/"
         content { includeGroupByRegex 'mezz\\.jei|net\\.mezzdev.*' } // JEI and its config library
     }
+    maven {
+        name = "Modrinth" // mods loaded in the dev game only, to check compatibility
+        url = "https://api.modrinth.com/maven"
+        content { includeGroup "maven.modrinth" }
+    }
 }
 
 base {
@@ -126,6 +131,11 @@ dependencies {
     // the API can't hide JEI's item list, so the survival-mode hiding uses JEI's own on/off switch
     compileOnly("mezz.jei:jei-${minecraft_version}-common:${jei_version}") { transitive = false }
     localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
+    // Big mods in the dev game, to check The Catalog with them (not dependencies of the mod)
+    localRuntime "maven.modrinth:create:6.0.10+mc1.21.1" // Flywheel, Ponder and Registrate come inside it
+    localRuntime "maven.modrinth:ars-nouveau:5.13.3"
+    localRuntime "maven.modrinth:curios:9.5.1+1.21.1" // required by Ars Nouveau
+    localRuntime "maven.modrinth:geckolib:Grwn5rUB" // 4.9.3 for NeoForge (by id: the number is shared with the Fabric build); required by Ars Nouveau
 
     testImplementation platform('org.junit:junit-bom:5.10.2')
     testImplementation 'org.junit.jupiter:junit-jupiter'
