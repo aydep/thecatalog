@@ -727,7 +727,7 @@ public class CatalogScreen extends Screen {
         flipTo(next, true);
     }
 
-    /** The item's recipes from The Catalog's own index, crafting-table ones first; a tag slot counts as its first item. */
+    /** The item's recipes from The Catalog's own index, crafting-table ones first; a tag slot keeps all its items. */
     private List<RecipeTree.Step<TreeKey>> treeSteps(TreeKey key) {
         ItemStack stack = key.stack();
         List<DisplayRecipe> found = new ArrayList<>(index.recipesFor(stack));
@@ -735,9 +735,10 @@ public class CatalogScreen extends Screen {
         List<RecipeTree.Step<TreeKey>> steps = new ArrayList<>();
         for (DisplayRecipe d : found) {
             int count = d.output.stacks().stream().filter(s -> s.is(stack.getItem())).mapToInt(ItemStack::getCount).findFirst().orElse(1);
-            List<RecipeTree.Amount<TreeKey>> inputs = new ArrayList<>();
+            List<RecipeTree.Input<TreeKey>> inputs = new ArrayList<>();
             for (DisplayRecipe.Slot slot : d.inputs) {
-                if (!slot.stacks().isEmpty()) inputs.add(new RecipeTree.Amount<>(TreeKey.of(slot.stacks().get(0)), slot.stacks().get(0).getCount()));
+                if (slot.stacks().isEmpty()) continue;
+                inputs.add(new RecipeTree.Input<>(slot.stacks().stream().map(TreeKey::of).distinct().toList(), slot.stacks().get(0).getCount()));
             }
             // shortcut: what a recipe gives back (the bucket of a milk bucket) is not counted, add it if trees look wrong for such items
             if (!inputs.isEmpty()) steps.add(new RecipeTree.Step<>(key, Math.max(1, count), inputs, d));

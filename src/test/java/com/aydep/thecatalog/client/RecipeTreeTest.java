@@ -16,9 +16,10 @@ class RecipeTreeTest {
     private final Map<String, List<Step<String>>> recipes = new HashMap<>();
     private final Set<String> natural = new HashSet<>();
 
+    /** inputs: item, count, item, count...; "a|b" is a slot taking either (a tag). */
     private void recipe(String output, int count, Object... inputs) {
-        List<Amount<String>> list = new ArrayList<>();
-        for (int i = 0; i < inputs.length; i += 2) list.add(new Amount<>((String) inputs[i], (Integer) inputs[i + 1]));
+        List<RecipeTree.Input<String>> list = new ArrayList<>();
+        for (int i = 0; i < inputs.length; i += 2) list.add(new RecipeTree.Input<>(List.of(((String) inputs[i]).split("[|]")), (Integer) inputs[i + 1]));
         recipes.computeIfAbsent(output, k -> new ArrayList<>()).add(new Step<>(output, count, list, "table"));
     }
 
@@ -76,6 +77,17 @@ class RecipeTreeTest {
         recipe("sand", 1, "gravel", 1); // a mod's crushing
         recipe("gravel", 1, "cobblestone", 1);
         natural.addAll(List.of("sand", "gravel"));
+        recipe("bottle", 3, "glass", 3);
+        assertEquals(List.of(new Amount<>("sand", 3)), tree("bottle").totalCost());
+    }
+
+    @Test
+    void tagSlotsTakeTheirCheapestItemNotTheOutput() {
+        // a mod's tiled glass is cut from any colorless glass (a tag holding tiled glass too) and smelts back into glass
+        recipe("glass", 1, "tiled_glass", 1);
+        recipe("glass", 1, "sand", 1);
+        recipe("tiled_glass", 1, "tiled_glass|glass", 1);
+        natural.add("sand");
         recipe("bottle", 3, "glass", 3);
         assertEquals(List.of(new Amount<>("sand", 3)), tree("bottle").totalCost());
     }

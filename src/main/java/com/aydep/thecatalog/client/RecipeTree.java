@@ -27,8 +27,11 @@ public final class RecipeTree<K> {
 
     public record Amount<K>(K key, int count) {}
 
+    /** A recipe slot: {@code count} of any one of {@code options} (a tag like "any planks" has several). */
+    public record Input<K>(List<K> options, int count) {}
+
     /** One recipe: {@code count} of {@code output} per craft from {@code inputs}; {@code station} is what to draw for it. */
-    public record Step<K>(K output, int count, List<Amount<K>> inputs, Object station) {}
+    public record Step<K>(K output, int count, List<Input<K>> inputs, Object station) {}
 
     /** {@code step} is null for a base ingredient; {@code need} is how many the parent asked for. */
     public record Node<K>(K key, int need, @Nullable Step<K> step, int crafts, List<Node<K>> children) {}
@@ -125,7 +128,6 @@ public final class RecipeTree<K> {
         return recipes(key).isEmpty() || natural.test(key);
     }
 
-    /** The recipe with the shortest way down to base items; ties go to the earlier one. -1 if there is none. */
     /**
      * The recipe with the shortest way down to base items; ties go to the earlier one. Recipes using an item further up
      * the branch (an iron block made from the ingots it is being broken into) are left out. -1 if none is left.
@@ -134,7 +136,7 @@ public final class RecipeTree<K> {
         List<Step<K>> list = recipes(key);
         int best = -1, bestHeight = Integer.MAX_VALUE;
         for (int i = 0; i < list.size(); i++) {
-            if (list.get(i).inputs().stream().anyMatch(input -> branch.contains(input.key()))) continue;
+            if (list.get(i).inputs().stream().anyMatch(input -> branch.contains(pick(input, key, branch)))) continue;
             int height = stepHeight(list.get(i));
             if (height < bestHeight) {
                 best = i;
@@ -144,10 +146,27 @@ public final class RecipeTree<K> {
         return best;
     }
 
+    /**
+     * The slot's item with the shortest way down (any planks: oak planks; ties go to the first), never the item the
+     * recipe makes (tags often hold it too) nor one further up the branch, unless the slot holds nothing else.
+     */
+    private K pick(Input<K> input, K output, Set<K> branch) {
+        K best = null;
+        int bestHeight = Integer.MAX_VALUE;
+        for (K option : input.options()) {
+            if (option.equals(output) || branch.contains(option)) continue;
+            int height = height(option);
+            if (height < bestHeight) {
+                best = option;
+                bestHeight = height;
+            }
+        }
+        return best != null ? best : input.options().get(0);
+    }
 
     private int stepHeight(Step<K> step) {
         int height = 0;
-        for (Amount<K> input : step.inputs()) height = Math.max(height, height(input.key()));
+        for (Input<K> input : step.inputs()) height = Math.max(height, height(pick(input, step.output(), Set.of())));
         return height >= FAR ? FAR : height + 1;
     }
 
@@ -168,7 +187,9 @@ public final class RecipeTree<K> {
         for (int i = 0; i < items.size() && seen.size() < MAX_ITEMS; i++) {
             if (i > 0 && base(items.get(i))) continue;
             for (Step<K> step : recipes(items.get(i))) {
-                for (Amount<K> input : step.inputs()) if (seen.add(input.key())) items.add(input.key());
+                for (Input<K> input : step.inputs()) {
+                    for (K option : input.options()) if (seen.add(option)) items.add(option);
+                }
             }
         }
         for (int i = 0; i < items.size(); i++) heights.put(items.get(i), i > 0 && base(items.get(i)) ? 0 : FAR);
@@ -201,9 +222,11 @@ public final class RecipeTree<K> {
         Set<K> seen = new HashSet<>();
         while (!todo.isEmpty()) {
             for (Step<K> step : recipes(todo.remove(todo.size() - 1))) {
-                for (Amount<K> input : step.inputs()) {
-                    if (input.key().equals(key)) return true;
-                    if (heights.getOrDefault(input.key(), 0) >= FAR && seen.add(input.key())) todo.add(input.key());
+                for (Input<K> input : step.inputs()) {
+                    for (K option : input.options()) {
+                        if (option.equals(key)) return true;
+                        if (heights.getOrDefault(option, 0) >= FAR && seen.add(option)) todo.add(option);
+                    }
                 }
             }
         }
@@ -226,7 +249,7 @@ public final class RecipeTree<K> {
         int extra = crafts * step.count() - rest;
         if (extra > 0) leftovers.merge(key, extra, Integer::sum);
         Map<K, Integer> perCraft = new LinkedHashMap<>(); // the same item in several slots counts once, added up
-        for (Amount<K> input : step.inputs()) perCraft.merge(input.key(), input.count(), Integer::sum);
+        for (Input<K> input : step.inputs()) perCraft.merge(pick(input, key, branch), input.count(), Integer::sum);
         branch.add(key);
         List<Node<K>> children = new ArrayList<>();
         perCraft.forEach((input, count) -> children.add(node(input, count * crafts, branch, depth + 1)));
