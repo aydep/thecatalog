@@ -11,8 +11,8 @@ like something you'd find in a library, not a spreadsheet: a quieter alternative
 **JEI is an optional dependency.** If [Just Enough Items](https://www.curseforge.com/minecraft/mc-mods/jei) is installed,
 The Catalog reads every recipe category JEI knows (from every mod that ships a JEI plugin: machines, fluids, info pages,
 fuel and more) and draws them right inside the book, so other mods need no changes to show up. Without JEI, The Catalog
-works on its own using Minecraft's recipe data. JEI's item list beside inventories is shown only in Creative
-mode; in Survival and Adventure the book replaces it (`Ctrl+O` still toggles it by hand).
+works on its own using Minecraft's recipe data. JEI's item list beside inventories can only be shown in
+Creative mode; in Survival and Adventure the book replaces it.
 
 ## Features
 

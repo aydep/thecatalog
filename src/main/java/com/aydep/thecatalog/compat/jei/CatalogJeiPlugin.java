@@ -10,23 +10,23 @@ import mezz.jei.common.Internal;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.resources.ResourceLocation;
-import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.common.NeoForge;
 import org.jetbrains.annotations.Nullable;
 
 /**
  * Found and loaded by JEI only, so nothing here runs without JEI installed. Once JEI has loaded every mod's plugin,
- * The Catalog's recipe pages read their categories and recipes from JEI. JEI's item list is shown only in Creative;
- * in other game modes the book takes its place.
+ * The Catalog's recipe pages read their categories and recipes from JEI. JEI's item list can only be shown in
+ * Creative; in other game modes the book takes its place.
  */
 @JeiPlugin
 public class CatalogJeiPlugin implements IModPlugin {
-    /** The game mode JEI's item list was last shown or hidden for; null until a world's runtime is up. */
+    /** Whether the player was in Creative when last checked; null until a world's runtime is up. */
     private static @Nullable Boolean creative;
     private static boolean running;
 
     public CatalogJeiPlugin() {
-        NeoForge.EVENT_BUS.addListener(CatalogJeiPlugin::onTick);
+        NeoForge.EVENT_BUS.addListener(CatalogJeiPlugin::onRender);
     }
 
     @Override
@@ -47,13 +47,16 @@ public class CatalogJeiPlugin implements IModPlugin {
         creative = null;
     }
 
-    /** Only on a game mode change, so Ctrl+O still works in between. */
-    private static void onTick(ClientTickEvent.Post event) {
+    /** Checked before every frame, so turning the list on (Ctrl+O) outside Creative is undone before it is drawn. */
+    private static void onRender(ScreenEvent.Render.Pre event) {
         LocalPlayer player = Minecraft.getInstance().player;
-        if (!running || player == null || Boolean.valueOf(player.isCreative()).equals(creative)) return;
-        creative = player.isCreative();
+        if (!running || player == null) return;
+        boolean now = player.isCreative();
         try {
-            Internal.getClientToggleState().setOverlayEnabled(creative);
+            var toggle = Internal.getClientToggleState();
+            if (!now && toggle.isOverlayEnabled()) toggle.setOverlayEnabled(false);
+            else if (now && Boolean.FALSE.equals(creative)) toggle.setOverlayEnabled(true); // back in Creative: show it again
+            creative = now;
         } catch (LinkageError | RuntimeException e) { // JEI internals; a future JEI may change them
             running = false;
             LogUtils.getLogger().warn("The Catalog could not hide JEI's item list: {}", e.toString());
