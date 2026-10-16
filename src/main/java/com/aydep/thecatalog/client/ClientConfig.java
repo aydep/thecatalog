@@ -29,12 +29,16 @@ public final class ClientConfig {
     static final ModConfigSpec.EnumValue<TabSide> TAB_SIDE = B
             .comment("Which edge of the book the bookmark tabs are on.")
             .defineEnum("tabSide", TabSide.LEFT);
-    static final ModConfigSpec.IntValue MAX_PAGE_WIDTH = B
-            .comment("Largest width of one page in GUI pixels. Smaller means fewer items per page.")
-            .defineInRange("maxPageWidth", 200, BookLayout.MIN_PAGE_WIDTH, 400);
-    static final ModConfigSpec.IntValue MAX_PAGE_HEIGHT = B
-            .comment("Largest height of one page in GUI pixels.")
-            .defineInRange("maxPageHeight", 240, BookLayout.MIN_PAGE_HEIGHT, 400);
+    // define() with a validator rather than defineInRange: the config screen shows a slider for any range under 256
+    // values, and a number field otherwise.
+    static final ModConfigSpec.ConfigValue<Integer> MAX_COLUMNS = B
+            .comment("Most item columns on one page (the book gets smaller to fit a small window). Range: "
+                    + BookLayout.MIN_COLUMNS + " ~ 30")
+            .define("maxColumns", 9, v -> v instanceof Integer i && i >= BookLayout.MIN_COLUMNS && i <= 30);
+    static final ModConfigSpec.ConfigValue<Integer> MAX_ROWS = B
+            .comment("Most item rows on one page (the book gets smaller to fit a small window). Range: "
+                    + BookLayout.MIN_ROWS + " ~ 30")
+            .define("maxRows", 10, v -> v instanceof Integer i && i >= BookLayout.MIN_ROWS && i <= 30);
     static final ModConfigSpec.BooleanValue PAGE_TURN_ANIMATION = B
             .comment("Animate pages turning.")
             .define("pageTurnAnimation", true);

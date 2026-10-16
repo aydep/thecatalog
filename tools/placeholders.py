@@ -80,12 +80,11 @@ def cover(x, y):
 
 
 def ribbon(c):
-    """26x22 bookmark ribbon, swallowtail notch at both ends (one end is hidden under the page)."""
+    """32x22 bookmark ribbon for the left edge: swallowtail notch on the outer (left) end; the right 4px sit under the page."""
     def px(x, y):
         depth = 5 - int(abs(y - 10.5) / 2.2)
-        end = min(x, 25 - x)
-        if end < depth: return CLEAR
-        if end == depth or y in (0, 21): return c["line"]
+        if x < depth: return CLEAR
+        if x == depth or y in (0, 21): return c["line"]
         if y == 1: return c["light"]
         if y >= 19: return c["shade"]
         if y in (4, 17) and x % 3: return c["seam"]
@@ -146,24 +145,71 @@ def magnifier(x, y):  # 9x9
     return INK_SOFT if 2.2 <= r <= 3.4 or (x == y and x >= 6) else CLEAR
 
 
-def book_item(x, y):
-    if x in (10, 11) and y >= 14: return PURPLE_SEL["body"]  # ribbon
-    if not (2 <= x <= 14 and 1 <= y <= 14): return CLEAR
-    if x == 14: return EDGE_LIGHT if 2 <= y <= 13 else CLEAR  # page edges
-    if x == 13 and y in (1, 14): return CLEAR
-    if (x >= 12 and y <= 2) or (x >= 12 and y >= 13): return GOLD
-    if x == 2 or y in (1, 14) or x == 13: return OUTLINE
-    if x == 3: return LEATHER_DARK
-    if abs(x - 8) + abs(y - 7.5) in (2.5,): return GOLD_LIGHT  # diamond emblem
-    return LEATHER
+def inside(poly, x, y):  # pixel centre inside a convex polygon given in pixel-corner coordinates
+    px, py, sign = x + .5, y + .5, 0
+    for (x1, y1), (x2, y2) in zip(poly, poly[1:] + poly[:1]):
+        c = (x2 - x1) * (py - y1) - (y2 - y1) * (px - x1)
+        if c:
+            if sign and (c > 0) != (sign > 0): return False
+            sign = c
+    return True
+
+
+# An isometric tome: leather top cover A-B-C-D; below the two front edges a side band of
+# cover / pages / back cover; three bookmarks hang out of the long front side.
+A, B, C, D, SIDE = (0, 8), (10, 3), (16, 6), (6, 11), 5
+TOP = [A, B, C, D]
+LEFT_SIDE, RIGHT_SIDE = [A, D, (D[0], D[1] + SIDE), (A[0], A[1] + SIDE)], [D, C, (C[0], C[1] + SIDE), (D[0], D[1] + SIDE)]
+COVER_RED, COVER_RED_LIGHT, COVER_RED_DARK, BACK = rgb("#7A4528"), rgb("#9A5C36"), rgb("#4E2C1A"), rgb("#3A2012")
+GEM, GEM_DARK = rgb("#5FD3E0"), rgb("#2E8C9A")
+RIBBONS = {9: (rgb("#C04040"), rgb("#8E2A2A")), 11: (rgb("#3AA86A"), rgb("#2A7A4C")), 13: (rgb("#4A7AC8"), rgb("#2A4E8A"))}
+
+
+def edge_y(x):  # y of the top cover's front edge (A-D then D-C) at pixel column x
+    cx = x + .5
+    return A[1] + (cx - A[0]) * 0.5 if cx <= D[0] else D[1] - (cx - D[0]) * 0.5
+
+
+def tome_fill(x, y):
+    if inside(TOP, x, y):
+        for cx, cy in TOP:  # gold corner caps
+            if abs(x + .5 - cx) / 2 + abs(y + .5 - cy) < 1.3: return GOLD
+        d = abs(x + .5 - 8) / 2 + abs(y + .5 - 7)  # gold-framed gem in the middle: the knowledge inside
+        if d < 0.9: return GEM_DARK if x + .5 > 8 and y + .5 > 7 else GEM  # lit from the top left
+        if d < 1.6: return GOLD_LIGHT
+        back_edge = A[1] - (x + .5 - A[0]) * 0.5  # A-B line, lit like a rounded spine
+        return COVER_RED_LIGHT if y + .5 - back_edge < 1.5 else COVER_RED
+    if inside(LEFT_SIDE, x, y) or inside(RIGHT_SIDE, x, y):
+        row = int(y + .5 - edge_y(x))
+        ribbon = RIBBONS.get(x)
+        if ribbon and row >= SIDE - 2: return ribbon[0]  # bookmarks come out between the lowest pages
+        if row == 0: return COVER_RED_DARK
+        if row == SIDE - 1: return BACK
+        if x + .5 < D[0]: return SHADE3 if row == 2 else SHADE2  # left side is in shadow
+        return SHADE2 if row == 2 else PAPER
+    x0 = x
+    if x0 in RIBBONS and 0 <= y + .5 - (edge_y(x0) + SIDE) < 2: return RIBBONS[x0][1]  # ribbon tails below the book
+    return None
+
+
+def tome(x, y):
+    fill = tome_fill(x, y)
+    if fill is None: return CLEAR
+    if fill in (r[1] for r in RIBBONS.values()) and not (inside(LEFT_SIDE, x, y) or inside(RIGHT_SIDE, x, y)):
+        return fill  # tails have no outline
+    edge = any(not (0 <= x + dx < 16 and 0 <= y + dy < 16) or tome_fill(x + dx, y + dy) is None
+               for dx, dy in ((1, 0), (-1, 0), (0, 1), (0, -1)))
+    return OUTLINE if edge else fill
 
 
 left = page(stitched=True)
 sprite("page_left", 48, 48, left, nine_slice=12)
 sprite("page_right", 48, 48, mirrored(page(stitched=False), 48), nine_slice=12)
 sprite("cover", 32, 32, cover, nine_slice=8)
-sprite("tab", 26, 22, ribbon(PURPLE))
-sprite("tab_selected", 26, 22, ribbon(PURPLE_SEL))
+sprite("tab", 32, 22, ribbon(PURPLE))
+sprite("tab_selected", 32, 22, ribbon(PURPLE_SEL))
+sprite("tab_right", 32, 22, mirrored(ribbon(PURPLE), 32))
+sprite("tab_right_selected", 32, 22, mirrored(ribbon(PURPLE_SEL), 32))
 sprite("tab_up", 12, 7, outlined(GOLD_LIGHT, triangle(12, 7, "up"), 12, 7))
 sprite("tab_down", 12, 7, outlined(GOLD_LIGHT, triangle(12, 7, "down"), 12, 7))
 sprite("page_forward", 18, 10, page_arrow(INK, True))
@@ -176,5 +222,7 @@ sprite("arrow", 22, 15, lambda x, y: INK_SOFT if (x < 14 and 6 <= y <= 8) or (x 
 sprite("flame", 14, 14, flame)
 sprite("search_field", 16, 12, search_field, nine_slice=3)
 sprite("search_icon", 9, 9, magnifier)
-save(os.path.join(OUT, "item", "catalog.png"), 16, 16, book_item)
+save(os.path.join(OUT, "item", "catalog.png"), 16, 16, tome)
+# mod logo for the Mods list: the item icon at 8x (OUT is .../assets/thecatalog/textures, the logo goes in resources/)
+save(os.path.join(OUT, "..", "..", "..", "logo.png"), 128, 128, lambda x, y: tome(x // 8, y // 8))
 print("ok")

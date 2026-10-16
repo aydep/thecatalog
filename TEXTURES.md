@@ -13,8 +13,9 @@ and `height` there too.
 | `cover.png` | 32×32 (9-slice, 8px border) | Leather cover behind the pages. It shows 7px left/right and 6px top/bottom of the pages. |
 | `page_left.png` | 48×48 (9-slice, 12px border) | Left page: outer edge on the left, spine gutter with stitches on the right. The stitch pattern repeats every 6px. |
 | `page_right.png` | 48×48 (9-slice, 12px border) | Right page, mirrored, without stitches. |
-| `tab.png` | 26×22 | Bookmark ribbon lying on the cover. 4px of the inner end are hidden under the page, so both ends are notched and the same sprite works for bookmarks on the left or right. The item icon is drawn at x=5, y=3. |
-| `tab_selected.png` | 26×22 | The open bookmark. It's drawn 3px further out. |
+| `tab.png` | 32×22 | Bookmark ribbon for bookmarks on the left: swallowtail notch on the outer (left) end; the right 4px are hidden under the page. The item icon is drawn at x=8, y=3. |
+| `tab_selected.png` | 32×22 | The open bookmark. It's drawn 6px further out. |
+| `tab_right.png`, `tab_right_selected.png` | 32×22 | The same two, mirrored, for bookmarks on the right (config). |
 | `tab_up.png`, `tab_down.png` | 12×7 | Arrows that scroll the bookmark column to the previous / next group. |
 | `page_forward.png` / `_highlighted` | 18×10 | Next page arrow (normal / mouse over). |
 | `page_backward.png` / `_highlighted` | 18×10 | Previous page arrow. |
@@ -25,6 +26,7 @@ and `height` there too.
 | `flame.png` | 14×14 | Flame under furnace inputs. |
 
 Item: `src/main/resources/assets/thecatalog/textures/item/catalog.png`, 16×16.
+Mod logo in the Mods list: `src/main/resources/logo.png`, 128×128 (the item icon at 8×, drawn without blur).
 
 Text colors are in `CatalogScreen.java`: `INK`, `FAINT_INK`, `SEARCH_TEXT` and `SEARCH_HINT`.
 

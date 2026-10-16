@@ -34,7 +34,8 @@ import org.lwjgl.glfw.GLFW;
 public class CatalogScreen extends Screen {
     private static final ResourceLocation PAGE_LEFT = sprite("page_left"), PAGE_RIGHT = sprite("page_right"), COVER = sprite("cover"),
             SEARCH_FIELD = sprite("search_field"), SEARCH_ICON = sprite("search_icon"),
-            TAB = sprite("tab"), TAB_SELECTED = sprite("tab_selected"), TAB_UP = sprite("tab_up"), TAB_DOWN = sprite("tab_down"),
+            TAB = sprite("tab"), TAB_SELECTED = sprite("tab_selected"),
+            TAB_RIGHT = sprite("tab_right"), TAB_RIGHT_SELECTED = sprite("tab_right_selected"), TAB_UP = sprite("tab_up"), TAB_DOWN = sprite("tab_down"),
             FORWARD = sprite("page_forward"), FORWARD_HOT = sprite("page_forward_highlighted"),
             BACKWARD = sprite("page_backward"), BACKWARD_HOT = sprite("page_backward_highlighted"),
             BACK = sprite("back"), BACK_HOT = sprite("back_highlighted");
@@ -89,7 +90,7 @@ public class CatalogScreen extends Screen {
 
     @Override
     protected void init() {
-        layout = BookLayout.fit(width, height, ClientConfig.MAX_PAGE_WIDTH.get(), ClientConfig.MAX_PAGE_HEIGHT.get(), tabsLeft());
+        layout = BookLayout.fit(width, height, ClientConfig.MAX_COLUMNS.get(), ClientConfig.MAX_ROWS.get(), tabsLeft());
         cache.clear();
         int x = layout.x() + 48, y = layout.y() + layout.pageHeight() - 21;
         search = new EditBox(font, x, y, layout.pageWidth() - 48 - MARGIN, 10, Component.translatable("gui.thecatalog.search"));
@@ -287,23 +288,24 @@ public class CatalogScreen extends Screen {
         boolean left = tabsLeft();
         int pw = layout.pageWidth(), top = layout.y() + 12;
         int tx = left ? layout.x() - BookLayout.TAB_WIDTH + 4 : layout.x() + 2 * pw - 4;
-        int outward = left ? -3 : 3, visibleX = left ? tx : tx + 4; // the part of the tab not under the page
+        int outward = left ? -6 : 6, visibleX = left ? tx : tx + 4; // visibleX: the part of the tab not under the page
         int visible = (layout.pageHeight() - 24) / TAB_HEIGHT;
         tabScroll = Math.clamp(tabScroll, 0, Math.max(0, tabs.size() - visible));
         if (tabScroll > 0) {
-            button(g, TAB_UP, TAB_UP, visibleX + 5, layout.y() + 3, 12, 7, mouseX, mouseY, () -> tabScroll -= visible);
+            button(g, TAB_UP, TAB_UP, visibleX + 8, layout.y() + 3, 12, 7, mouseX, mouseY, () -> tabScroll -= visible);
         }
         if (tabScroll + visible < tabs.size()) {
-            button(g, TAB_DOWN, TAB_DOWN, visibleX + 5, top + visible * TAB_HEIGHT + 2, 12, 7, mouseX, mouseY, () -> tabScroll += visible);
+            button(g, TAB_DOWN, TAB_DOWN, visibleX + 8, top + visible * TAB_HEIGHT + 2, 12, 7, mouseX, mouseY, () -> tabScroll += visible);
         }
         int current = view instanceof IndexView v ? v.tab() : -1;
         for (int i = tabScroll; i < Math.min(tabs.size(), tabScroll + visible); i++) {
             int x = tx + (i == current ? outward : 0), y = top + (i - tabScroll) * TAB_HEIGHT;
-            g.blitSprite(i == current ? TAB_SELECTED : TAB, x, y, 26, TAB_HEIGHT);
-            g.renderItem(tabs.get(i).icon(), x + 5, y + 3);
-            if (inside(mouseX, mouseY, x, y, 26, TAB_HEIGHT)) hoveredText = tabs.get(i).name();
+            ResourceLocation sprite = left ? (i == current ? TAB_SELECTED : TAB) : (i == current ? TAB_RIGHT_SELECTED : TAB_RIGHT);
+            g.blitSprite(sprite, x, y, BookLayout.TAB_WIDTH, TAB_HEIGHT);
+            g.renderItem(tabs.get(i).icon(), x + 8, y + 3);
+            if (inside(mouseX, mouseY, x, y, BookLayout.TAB_WIDTH, TAB_HEIGHT)) hoveredText = tabs.get(i).name();
             int tab = i;
-            hotspots.add(new Hotspot(x, y, 26, TAB_HEIGHT, () -> selectTab(tab)));
+            hotspots.add(new Hotspot(x, y, BookLayout.TAB_WIDTH, TAB_HEIGHT, () -> selectTab(tab)));
         }
     }
 
