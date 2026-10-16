@@ -39,5 +39,15 @@
   "thecatalog.configuration.showModName.tooltip": "Показывать название мода под подсказками предметов в книге.",
   "thecatalog.configuration.hideItemsWithoutRecipes.tooltip": "Не показывать в сетке предметы без рецепта.",
   "thecatalog.configuration.giveOnFirstJoin.tooltip": "Выдавать каждому игроку один Каталог при первом входе в мир.",
-  "gui.thecatalog.indexing": "Индексация рецептов…"
+  "gui.thecatalog.indexing": "Индексация рецептов…",
+  "gui.thecatalog.desc.block": "%s — блок из %s.",
+  "gui.thecatalog.desc.item": "%s — предмет из %s.",
+  "gui.thecatalog.desc.stacks": "Складывается в стопки до %s.",
+  "gui.thecatalog.desc.unstackable": "Не складывается в стопки.",
+  "gui.thecatalog.desc.durability": "Прочность: %s.",
+  "gui.thecatalog.desc.food": "Восстанавливает единиц голода: %s.",
+  "gui.thecatalog.desc.recipes": "Рецептов, которые его создают: %s.",
+  "gui.thecatalog.desc.no_recipes": "Его нельзя создать, только найти или добыть.",
+  "gui.thecatalog.desc.uses": "Рецептов, где он используется: %s.",
+  "gui.thecatalog.desc.no_uses": "Не используется ни в одном рецепте."
 }

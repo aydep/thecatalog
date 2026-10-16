@@ -21,13 +21,19 @@ import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.resources.language.I18n;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.client.resources.sounds.SimpleSoundInstance;
 import net.minecraft.locale.Language;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
+import net.minecraft.world.food.FoodProperties;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
@@ -260,7 +266,7 @@ public class CatalogScreen extends Screen {
         return allRecipes(v).stream().filter(e -> e.category().equals(category)).map(e -> (RecipeEntry) e).toList();
     }
 
-    /** Page 0 (the first left page) is left blank; page 1 starts with the item header. */
+    /** Page 0 (the first left page) holds the item header and description; recipes start on page 1. */
     private List<List<RecipeEntry>> recipePages(RecipeView v) {
         return cached(List.of(v.stack().getItem(), v.stack().getComponentsPatch(), v.uses(), v.category()), () -> {
             List<List<RecipeEntry>> pages = new ArrayList<>();
@@ -268,7 +274,7 @@ public class CatalogScreen extends Screen {
             List<RecipeEntry> page = new ArrayList<>();
             int used = 0, width = layout.pageWidth() - 2 * MARGIN;
             for (RecipeEntry recipe : recipesIn(v)) {
-                int room = layout.pageHeight() - MARGIN - FOOTER - (pages.size() == 1 ? RECIPE_HEADER : 0);
+                int room = layout.pageHeight() - MARGIN - FOOTER;
                 int height = recipe.pageHeight(width);
                 // shortcut: a recipe taller than a whole page (huge modded grids) overflows it instead of being scaled down.
                 if (!page.isEmpty() && used + height > room) {
@@ -391,10 +397,11 @@ public class CatalogScreen extends Screen {
         }
     }
 
-    /** Category bookmarks along the top edge (4px tucked under the page); arrows scroll when they don't all fit. */
+    /** Category bookmarks along the top edge of the right page (4px tucked under it); arrows scroll when they don't all fit. */
     private void drawCategoryTabs(GuiGraphics g, RecipeView v, int mouseX, int mouseY) {
         List<RecipeEntry> categories = categories(v);
-        int bx = layout.x(), by = layout.y(), left = bx + 18, right = bx + 2 * layout.pageWidth() - 18;
+        // over the right page, where the recipes are
+        int bx = layout.x(), by = layout.y(), pw = layout.pageWidth(), left = bx + pw + 14, right = bx + 2 * pw - 14;
         int visible = Math.max(1, (right - left) / TOP_TAB_STEP);
         int current = Math.clamp(v.category(), 0, Math.max(0, categories.size() - 1));
         // when the view changes (another item, Back), scroll so the open bookmark is in view; otherwise keep the player's scrolling
@@ -405,10 +412,10 @@ public class CatalogScreen extends Screen {
         categoryScroll = Math.clamp(categoryScroll, 0, Math.max(0, categories.size() - visible));
         int arrowY = by - 23;
         if (categoryScroll > 0) {
-            button(g, TAB_PREV, TAB_PREV, bx + 7, arrowY, 7, 12, mouseX, mouseY, () -> categoryScroll -= visible);
+            button(g, TAB_PREV, TAB_PREV, left - 10, arrowY, 7, 12, mouseX, mouseY, () -> categoryScroll -= visible);
         }
         if (categoryScroll + visible < categories.size()) {
-            button(g, TAB_NEXT, TAB_NEXT, right + 4, arrowY, 7, 12, mouseX, mouseY, () -> categoryScroll += visible);
+            button(g, TAB_NEXT, TAB_NEXT, right + 3, arrowY, 7, 12, mouseX, mouseY, () -> categoryScroll += visible);
         }
         for (int i = categoryScroll; i < Math.min(categories.size(), categoryScroll + visible); i++) {
             int x = left + (i - categoryScroll) * TOP_TAB_STEP, y = by - TOP_TAB_HEIGHT + 4 - (i == current ? 6 : 0);
@@ -458,7 +465,7 @@ public class CatalogScreen extends Screen {
         List<List<RecipeEntry>> pages = recipePages(v);
         int page = v.spread() * 2 + side, width = layout.pageWidth() - 2 * MARGIN;
         int x = px + MARGIN, y = py + MARGIN;
-        if (page == 1) {
+        if (page == 0) {
             if (!history.isEmpty()) {
                 button(g, BACK, BACK_HOT, x, y + 3, 14, 10, mouseX, mouseY, this::back);
                 if (inside(mouseX, mouseY, x, y + 3, 14, 10)) hoveredText = Component.translatable("gui.thecatalog.back");
@@ -468,11 +475,12 @@ public class CatalogScreen extends Screen {
             Component recipes = Component.translatable("gui.thecatalog.recipes"), uses = Component.translatable("gui.thecatalog.uses");
             modeToggle(g, recipes, x, y + 22, !v.uses(), mouseX, mouseY, () -> switchMode(v, false));
             modeToggle(g, uses, x + font.width(recipes) + 10, y + 22, v.uses(), mouseX, mouseY, () -> switchMode(v, true));
-            y += RECIPE_HEADER;
-            if (pages.size() == 1) {
-                String key = v.uses() ? "gui.thecatalog.no_uses" : "gui.thecatalog.no_recipes";
-                g.drawString(font, Component.translatable(key), x, y, FAINT_INK, false);
-            }
+            drawDescription(g, description(v.stack()), x, y + RECIPE_HEADER, width, py + layout.pageHeight() - FOOTER);
+            return;
+        }
+        if (page == 1 && pages.size() == 1) {
+            String key = v.uses() ? "gui.thecatalog.no_uses" : "gui.thecatalog.no_recipes";
+            g.drawString(font, Component.translatable(key), x, y, FAINT_INK, false);
         }
         if (page >= pages.size()) return;
         for (RecipeEntry entry : pages.get(page)) {
@@ -480,6 +488,51 @@ public class CatalogScreen extends Screen {
             else if (entry instanceof ExternalRecipes.Entry external) drawExternal(g, external, x, y, width, mouseX, mouseY);
             y += entry.pageHeight(width) + RECIPE_GAP;
         }
+    }
+
+    /**
+     * The item's description: a translation of {@code thecatalog.desc.<mod>.<item>} if any language file has one (vanilla
+     * items ship with one; mods and resource packs can add their own), otherwise sentences built from the item's data.
+     */
+    private Component description(ItemStack stack) {
+        return cached(List.of("description", stack.getItem(), stack.getComponentsPatch()), () -> {
+            ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
+            String key = "thecatalog.desc." + id.getNamespace() + "." + id.getPath().replace('/', '.');
+            if (I18n.exists(key)) return Component.translatable(key);
+            String mod = CatalogIndex.modName(id.getNamespace());
+            MutableComponent text = Component.translatable(
+                    stack.getItem() instanceof BlockItem ? "gui.thecatalog.desc.block" : "gui.thecatalog.desc.item", stack.getHoverName(), mod);
+            int stackSize = stack.getMaxStackSize();
+            sentence(text, stackSize > 1 ? Component.translatable("gui.thecatalog.desc.stacks", stackSize)
+                    : Component.translatable("gui.thecatalog.desc.unstackable"));
+            if (stack.isDamageableItem()) sentence(text, Component.translatable("gui.thecatalog.desc.durability", stack.getMaxDamage()));
+            FoodProperties food = stack.get(DataComponents.FOOD);
+            if (food != null) sentence(text, Component.translatable("gui.thecatalog.desc.food", food.nutrition()));
+            int made = allRecipes(new RecipeView(stack, false, 0, 0)).size(), used = allRecipes(new RecipeView(stack, true, 0, 0)).size();
+            sentence(text, made > 0 ? Component.translatable("gui.thecatalog.desc.recipes", made) : Component.translatable("gui.thecatalog.desc.no_recipes"));
+            sentence(text, used > 0 ? Component.translatable("gui.thecatalog.desc.uses", used) : Component.translatable("gui.thecatalog.desc.no_uses"));
+            return text;
+        });
+    }
+
+    private static void sentence(MutableComponent text, Component next) {
+        text.append(" ").append(next);
+    }
+
+    /** Wrapped text; shrinks a little (down to 3/4 size) on small pages so long descriptions still fit. */
+    private void drawDescription(GuiGraphics g, Component text, int x, int y, int width, int bottom) {
+        float scale = 1f;
+        List<FormattedCharSequence> lines = font.split(text, width);
+        while (scale > 0.75f && lines.size() * font.lineHeight * scale > bottom - y) {
+            scale -= 0.05f;
+            lines = font.split(text, (int) (width / scale));
+        }
+        g.pose().pushPose();
+        g.pose().translate(x, y, 0);
+        g.pose().scale(scale, scale, 1);
+        int maxLines = (int) ((bottom - y) / (font.lineHeight * scale));
+        for (int i = 0; i < Math.min(lines.size(), maxLines); i++) g.drawString(font, lines.get(i), 0, i * font.lineHeight, INK, false);
+        g.pose().popPose();
     }
 
     private void switchMode(RecipeView v, boolean uses) {

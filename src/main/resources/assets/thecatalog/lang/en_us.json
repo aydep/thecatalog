@@ -27,5 +27,15 @@
   "thecatalog.configuration.requireBookInInventory": "Require book in inventory",
   "thecatalog.configuration.showModName": "Show mod name in tooltips",
   "thecatalog.configuration.hideItemsWithoutRecipes": "Hide items without recipes",
-  "gui.thecatalog.indexing": "Indexing recipes…"
+  "gui.thecatalog.indexing": "Indexing recipes…",
+  "gui.thecatalog.desc.block": "%s is a block from %s.",
+  "gui.thecatalog.desc.item": "%s is an item from %s.",
+  "gui.thecatalog.desc.stacks": "It stacks up to %s.",
+  "gui.thecatalog.desc.unstackable": "It doesn't stack.",
+  "gui.thecatalog.desc.durability": "It has %s durability.",
+  "gui.thecatalog.desc.food": "Eating it restores %s hunger points.",
+  "gui.thecatalog.desc.recipes": "Recipes that make it: %s.",
+  "gui.thecatalog.desc.no_recipes": "No recipe makes it, so it has to be found or gathered.",
+  "gui.thecatalog.desc.uses": "Recipes that use it: %s.",
+  "gui.thecatalog.desc.no_uses": "It isn't used in any recipe."
 }
