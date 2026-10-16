@@ -5,6 +5,7 @@ import com.aydep.thecatalog.client.CatalogScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.recipebook.RecipeBookComponent;
+import net.minecraft.world.inventory.RecipeBookMenu;
 import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -17,7 +18,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /**
  * The recipe book button stays, but opens The Catalog's one-page panel in the recipe book's place. The container
  * screens still move aside for it exactly as for the recipe book; only its drawing and input are replaced. Without the
- * book in the inventory (if the config asks for it) the button is hidden and the book stays shut.
+ * book in the inventory (if the config asks for it) the button is hidden and the book stays shut. The vanilla ghost
+ * recipe (shown when the panel's craft button lacks ingredients) and its tooltip still draw as usual.
  */
 @Mixin(RecipeBookComponent.class)
 public abstract class RecipeBookComponentMixin implements CatalogScreen.PanelHost {
@@ -25,6 +27,7 @@ public abstract class RecipeBookComponentMixin implements CatalogScreen.PanelHos
     @Shadow private int height;
     @Shadow private int xOffset;
     @Shadow protected Minecraft minecraft;
+    @Shadow protected RecipeBookMenu<?, ?> menu;
 
     @Shadow public abstract boolean isVisible();
 
@@ -51,7 +54,7 @@ public abstract class RecipeBookComponentMixin implements CatalogScreen.PanelHos
     /** Runs whenever the book is opened or its screen resized. */
     @Inject(method = "initVisuals", at = @At("TAIL"))
     private void thecatalog$initVisuals(CallbackInfo ci) {
-        thecatalog$panel = CatalogScreen.panel(minecraft, width, height, (width - 147) / 2 - xOffset, (height - 166) / 2);
+        thecatalog$panel = CatalogScreen.panel(minecraft, width, height, (width - 147) / 2 - xOffset, (height - 166) / 2, menu);
     }
 
     @Inject(method = "render", at = @At("HEAD"), cancellable = true)
@@ -63,16 +66,6 @@ public abstract class RecipeBookComponentMixin implements CatalogScreen.PanelHos
         panel.render(g, mouseX, mouseY, partialTick);
         g.pose().popPose();
         ci.cancel();
-    }
-
-    @Inject(method = "renderTooltip", at = @At("HEAD"), cancellable = true)
-    private void thecatalog$renderTooltip(CallbackInfo ci) {
-        if (thecatalog$panel() != null) ci.cancel(); // the panel draws its own tooltips
-    }
-
-    @Inject(method = "renderGhostRecipe", at = @At("HEAD"), cancellable = true)
-    private void thecatalog$renderGhostRecipe(CallbackInfo ci) {
-        if (thecatalog$panel() != null) ci.cancel();
     }
 
     /** Without the book the vanilla tick would keep reopening it to match the player's setting, so it is skipped. */

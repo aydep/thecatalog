@@ -8,6 +8,7 @@
   "gui.thecatalog.search": "Поиск... (@мод)",
   "gui.thecatalog.recipes": "Рецепты",
   "gui.thecatalog.uses": "Применения",
+  "gui.thecatalog.craft_help": "Клик: добавить один · Shift+клик: добавить все",
   "gui.thecatalog.no_recipes": "Рецепт неизвестен",
   "gui.thecatalog.no_uses": "Нигде не используется",
   "gui.thecatalog.nothing_found": "Ничего не найдено",

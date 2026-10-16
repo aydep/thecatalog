@@ -17,6 +17,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.crafting.AbstractCookingRecipe;
 import net.minecraft.world.item.crafting.Recipe;
+import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.item.crafting.ShapedRecipe;
 import net.minecraft.world.item.crafting.SmithingRecipe;
@@ -49,6 +50,7 @@ public final class DisplayRecipe implements RecipeEntry {
 
     public final Component caption;
     private @Nullable ResourceLocation categoryId;
+    private @Nullable RecipeHolder<?> holder;
     private ItemStack icon = ItemStack.EMPTY;
     /** What this recipe is listed under as "recipes"; empty for ones listed only under "uses". */
     final List<ItemStack> results;
@@ -80,6 +82,11 @@ public final class DisplayRecipe implements RecipeEntry {
     }
 
     @Override
+    public @Nullable RecipeHolder<?> holder() {
+        return holder;
+    }
+
+    @Override
     public void drawCategoryIcon(GuiGraphics g, int x, int y) {
         g.renderItem(icon, x, y);
     }
@@ -102,9 +109,11 @@ public final class DisplayRecipe implements RecipeEntry {
                 && (recipeStack.getComponentsPatch().isEmpty() || ItemStack.isSameItemSameComponents(recipeStack, stack));
     }
 
-    static @Nullable DisplayRecipe of(Recipe<?> recipe, RegistryAccess registries, List<ItemStack> allItems) {
+    static @Nullable DisplayRecipe of(RecipeHolder<?> holder, RegistryAccess registries, List<ItemStack> allItems) {
+        Recipe<?> recipe = holder.value();
         DisplayRecipe d = layout(recipe, registries, allItems);
         if (d == null) return null;
+        d.holder = holder;
         d.categoryId = BuiltInRegistries.RECIPE_TYPE.getKey(recipe.getType());
         ItemStack station = recipe.getToastSymbol();
         // types that don't name their station report a crafting table; show what they make instead

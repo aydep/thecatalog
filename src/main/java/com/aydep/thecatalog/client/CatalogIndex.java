@@ -138,7 +138,7 @@ public final class CatalogIndex {
         addTabs(all, creativeTabs, tabItems);
         for (RecipeHolder<?> holder : recipes) {
             try {
-                add(DisplayRecipe.of(holder.value(), registries, all));
+                add(DisplayRecipe.of(holder, registries, all));
             } catch (RuntimeException e) { // one broken modded recipe must not cost the whole book
                 LOGGER.warn("The Catalog skipped recipe {}: {}", holder.id(), e.toString());
             }

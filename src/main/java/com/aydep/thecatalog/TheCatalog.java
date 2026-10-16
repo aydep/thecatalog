@@ -49,6 +49,7 @@ public class TheCatalog {
         // the handler only runs on the client, so the client class is never loaded on a dedicated server
         event.registrar("1").playToClient(GenerationPayload.TYPE, GenerationPayload.STREAM_CODEC,
                 (payload, context) -> com.aydep.thecatalog.client.Generation.receive(payload.json()));
+        event.registrar("1").playToServer(CraftPayload.TYPE, CraftPayload.STREAM_CODEC, CraftPayload::handle);
     }
 
     /** Fires when a player joins and after /reload: send them where every ore generates. */

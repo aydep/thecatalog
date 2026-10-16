@@ -6,6 +6,7 @@ import static com.aydep.thecatalog.client.BookLayout.MARGIN;
 import static com.aydep.thecatalog.client.BookLayout.SLOT;
 import static com.aydep.thecatalog.client.DisplayRecipe.sprite;
 
+import com.aydep.thecatalog.CraftPayload;
 import com.mojang.blaze3d.platform.InputConstants;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -37,7 +38,10 @@ import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.util.Mth;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.inventory.RecipeBookMenu;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.RecipeHolder;
+import net.neoforged.neoforge.network.PacketDistributor;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
@@ -57,14 +61,14 @@ public class CatalogScreen extends Screen {
             TAB_RIGHT = sprite("tab_right"), TAB_RIGHT_SELECTED = sprite("tab_right_selected"), TAB_UP = sprite("tab_up"), TAB_DOWN = sprite("tab_down"),
             FORWARD = sprite("page_forward"), FORWARD_HOT = sprite("page_forward_highlighted"),
             BACKWARD = sprite("page_backward"), BACKWARD_HOT = sprite("page_backward_highlighted"),
-            BACK = sprite("back"), BACK_HOT = sprite("back_highlighted");
+            BACK = sprite("back"), BACK_HOT = sprite("back_highlighted"), CRAFT = sprite("craft"), CRAFT_HOT = sprite("craft_highlighted");
     private static final int INK = 0xFF4A3524, FAINT_INK = 0xFF9A8462, HOVER = 0x304A3524, BRACE = 0xFFC4A877;
     private static final int SEARCH_TEXT = 0xFF5A4330, SEARCH_HINT = 0xFFB09A74, COVER_BORDER_X = 7, COVER_BORDER_Y = 6;
     // Bookmark sprites are longer than what shows: TAB_TUCK pixels sit under the page, so the open bookmark,
     // drawn TAB_SHIFT further out, still reaches under it.
     private static final int TAB_SPRITE = 40, TAB_TUCK = 12, TAB_SHIFT = 6;
     private static final int TOP_TAB_WIDTH = 22, TOP_TAB_STEP = 23;
-    private static final int SEARCH_TAB_INSET = 10, TAB_HEIGHT = 22, RECIPE_HEADER = 34, RECIPE_GAP = 6;
+    private static final int SEARCH_TAB_INSET = 10, TAB_HEIGHT = 22, RECIPE_HEADER = 34, RECIPE_GAP = 6, CRAFT_COLUMN = 13;
 
     sealed interface View permits IndexView, RecipeView {
         int spread();
@@ -99,6 +103,7 @@ public class CatalogScreen extends Screen {
     private final int panelX, panelY;
     private final Memory memory;
     private double lastMouseX, lastMouseY;
+    private @Nullable RecipeBookMenu<?, ?> menu; // the panel's crafting grid or furnace, for the craft buttons
     private @Nullable CatalogIndex index = CatalogIndex.current(); // null until the first background build is done
     private final Map<Object, Object> cache = new HashMap<>();
     private final List<Hotspot> hotspots = new ArrayList<>();
@@ -138,8 +143,9 @@ public class CatalogScreen extends Screen {
      * The side panel, with its top-left corner where the vanilla recipe book's would be. Set up by hand rather than
      * with {@code init(Minecraft, int, int)}, which would tell other mods (JEI) that this screen had opened.
      */
-    public static CatalogScreen panel(Minecraft minecraft, int screenWidth, int screenHeight, int x, int y) {
+    public static CatalogScreen panel(Minecraft minecraft, int screenWidth, int screenHeight, int x, int y, RecipeBookMenu<?, ?> menu) {
         CatalogScreen panel = new CatalogScreen(null, null, true, x, y);
+        panel.menu = menu;
         panel.minecraft = minecraft;
         panel.font = minecraft.font;
         panel.width = screenWidth;
@@ -336,7 +342,7 @@ public class CatalogScreen extends Screen {
             List<List<RecipeEntry>> pages = new ArrayList<>();
             if (!compact) pages.add(List.of());
             List<RecipeEntry> page = new ArrayList<>();
-            int used = 0, width = layout.pageWidth() - 2 * MARGIN;
+            int used = 0, width = recipeWidth();
             int room = layout.pageHeight() - MARGIN - FOOTER - (compact ? RECIPE_HEADER : 0);
             for (RecipeEntry recipe : recipesIn(v)) {
                 if (recipe instanceof Generation gen) gen.fit(room);
@@ -361,6 +367,11 @@ public class CatalogScreen extends Screen {
             case RecipeView r -> recipePages(r).size();
         };
         return compact ? Math.max(1, pages) : BookLayout.spreads(pages);
+    }
+
+    /** The width recipes are drawn in: on the panel, minus a column for the craft buttons. */
+    private int recipeWidth() {
+        return layout.pageWidth() - 2 * MARGIN - (menu != null ? CRAFT_COLUMN : 0);
     }
 
     /** Which page a side of the view shows; the panel shows one page per spread. */
@@ -587,11 +598,18 @@ public class CatalogScreen extends Screen {
             g.drawString(font, Component.translatable(key), x, y, FAINT_INK, false);
         }
         if (page >= pages.size()) return;
+        width = recipeWidth();
         for (RecipeEntry entry : pages.get(page)) {
             if (entry instanceof DisplayRecipe recipe) drawRecipe(g, recipe, x, y, mouseX, mouseY);
             else if (entry instanceof ExternalRecipes.Entry external) drawExternal(g, external, x, y, width, mouseX, mouseY);
             else if (entry instanceof InfoEntry info) drawInfo(g, info, x, y, width, mouseX, mouseY);
             else if (entry instanceof Generation gen) drawGeneration(g, gen, x, y, width, mouseX, mouseY);
+            RecipeHolder<?> holder = entry.holder();
+            if (menu != null && holder != null && CraftPayload.fits(menu, holder)) {
+                int bx = x + width + CRAFT_COLUMN - 11, by = y + (entry.pageHeight(width) - 11) / 2;
+                button(g, CRAFT, CRAFT_HOT, bx, by, 11, 11, mouseX, mouseY, () -> craft(holder));
+                if (inside(mouseX, mouseY, bx, by, 11, 11)) hoveredText = Component.translatable("gui.thecatalog.craft_help");
+            }
             y += entry.pageHeight(width) + RECIPE_GAP;
         }
     }
@@ -654,6 +672,12 @@ public class CatalogScreen extends Screen {
         int maxLines = (int) ((bottom - y) / (font.lineHeight * scale));
         for (int i = 0; i < Math.min(lines.size(), maxLines); i++) g.drawString(font, lines.get(i), 0, i * font.lineHeight, INK, false);
         g.pose().popPose();
+    }
+
+    /** Like a click in the vanilla recipe book: the server moves the ingredients into the grid, one craft or (Shift) all. */
+    private void craft(RecipeHolder<?> holder) {
+        PacketDistributor.sendToServer(new CraftPayload(menu.containerId, holder.id(), hasShiftDown()));
+        minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0F));
     }
 
     private void switchMode(RecipeView v, boolean uses) {

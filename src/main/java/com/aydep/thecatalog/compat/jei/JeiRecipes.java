@@ -22,6 +22,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.RecipeHolder;
 import org.jetbrains.annotations.Nullable;
 
 /** Every recipe JEI knows, from every mod's JEI plugin, looked up by item and drawn by the category's own code. */
@@ -95,6 +96,11 @@ final class JeiRecipes implements ExternalRecipes.Source {
         @Override
         public Object category() {
             return category.getRecipeType();
+        }
+
+        @Override
+        public @Nullable RecipeHolder<?> holder() {
+            return recipe instanceof RecipeHolder<?> holder ? holder : null; // JEI's vanilla categories hold the game's recipes
         }
 
         @Override
