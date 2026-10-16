@@ -38,7 +38,7 @@ public final class ClientConfig {
     static final ModConfigSpec.ConfigValue<Integer> MAX_ROWS = B
             .comment("Most item rows on one page (the book gets smaller to fit a small window). Range: "
                     + BookLayout.MIN_ROWS + " ~ 30")
-            .define("maxRows", 10, v -> v instanceof Integer i && i >= BookLayout.MIN_ROWS && i <= 30);
+            .define("maxRows", 8, v -> v instanceof Integer i && i >= BookLayout.MIN_ROWS && i <= 30);
     static final ModConfigSpec.BooleanValue PAGE_TURN_ANIMATION = B
             .comment("Animate pages turning.")
             .define("pageTurnAnimation", true);

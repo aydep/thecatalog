@@ -129,15 +129,48 @@ def back(color):  # 14x10: hook arrow pointing left
     return px
 
 
+SLOT_FILL, SLOT_DARK, SLOT_LIGHT, SLOT_RIM, PANEL_FILL = (
+    rgb("#EFE3C6"), rgb("#D2BD92"), rgb("#FFF9EC"), rgb("#E6D7B4"), rgb("#F7EEDB"))
+
+
+def slot(x, y):  # 18x18 inset slot box
+    if x in (0, 17) or y in (0, 17): return SLOT_RIM
+    if x == 1 or y == 1: return SLOT_DARK
+    if x == 16 or y == 16: return SLOT_LIGHT
+    return SLOT_FILL
+
+
+def rounded(w, h, fill):
+    def px(x, y):
+        cx, cy = min(x, w - 1 - x), min(y, h - 1 - y)
+        if cx + cy < 2: return CLEAR
+        if cx == 0 or cy == 0 or cx + cy == 2: return SLOT_DARK
+        if cx == 1 or cy == 1: return SLOT_LIGHT
+        return fill
+    return px
+
+
+def output_frame(x, y):  # 24x24: rounded frame with a slot inside
+    return slot(x - 3, y - 3) if 3 <= x <= 20 and 3 <= y <= 20 else rounded(24, 24, PANEL_FILL)(x, y)
+
+
+def chevron(x, y):  # 7x9 ">"
+    d = 4 - abs(y - 4)
+    return ORNAMENT if x in (d, d + 1) else CLEAR
+
+
+def search_tab(x, y):  # 32x24, 8px 9-slice border; the top hides behind the cover, the bottom corners are rounded
+    cx, cy = min(x, 31 - x), 23 - y
+    if cx + cy < 2: return CLEAR
+    if cx == 0 or cy == 0 or cx + cy == 2: return EDGE_DARK
+    if cx == 1 or cy == 1: return EDGE_LIGHT
+    return PAPER_SPECK if speck(x, y) else PAPER
+
+
 def flame(x, y):
     cx = abs(x - 6.5)
     if not (y > 2 and cx <= (y - 2) * 0.55 and cx < 6): return CLEAR
     return rgb("#F5C542") if y < 7 else rgb("#E8862B") if y < 11 else rgb("#C0392B")
-
-
-def search_field(x, y):  # 16x12, 3px 9-slice border
-    if x in (0, 15) or y in (0, 11): return SHADE3
-    return SHADE2 if y == 1 else PAPER_SPECK
 
 
 def magnifier(x, y):  # 9x9
@@ -157,7 +190,7 @@ def inside(poly, x, y):  # pixel centre inside a convex polygon given in pixel-c
 
 # An isometric tome: leather top cover A-B-C-D; below the two front edges a side band of
 # cover / pages / back cover; three bookmarks hang out of the long front side.
-A, B, C, D, SIDE = (0, 8), (10, 3), (16, 6), (6, 11), 5
+A, B, C, D, SIDE = (0, 6), (10, 1), (16, 4), (6, 9), 6
 TOP = [A, B, C, D]
 LEFT_SIDE, RIGHT_SIDE = [A, D, (D[0], D[1] + SIDE), (A[0], A[1] + SIDE)], [D, C, (C[0], C[1] + SIDE), (D[0], D[1] + SIDE)]
 COVER_RED, COVER_RED_LIGHT, COVER_RED_DARK, BACK = rgb("#7A4528"), rgb("#9A5C36"), rgb("#4E2C1A"), rgb("#3A2012")
@@ -174,9 +207,9 @@ def tome_fill(x, y):
     if inside(TOP, x, y):
         for cx, cy in TOP:  # gold corner caps
             if abs(x + .5 - cx) / 2 + abs(y + .5 - cy) < 1.3: return GOLD
-        d = abs(x + .5 - 8) / 2 + abs(y + .5 - 7)  # gold-framed gem in the middle: the knowledge inside
-        if d < 0.9: return GEM_DARK if x + .5 > 8 and y + .5 > 7 else GEM  # lit from the top left
-        if d < 1.6: return GOLD_LIGHT
+        if 6 <= x <= 9 and 4 <= y <= 5:  # a gem in the middle, the knowledge inside, lit from the top left
+            return GEM_DARK if x >= 8 and y == 5 else GEM
+        if (6 <= x <= 9 and y in (3, 6)) or (x in (5, 10) and 4 <= y <= 5): return GOLD_LIGHT  # gold setting all around
         back_edge = A[1] - (x + .5 - A[0]) * 0.5  # A-B line, lit like a rounded spine
         return COVER_RED_LIGHT if y + .5 - back_edge < 1.5 else COVER_RED
     if inside(LEFT_SIDE, x, y) or inside(RIGHT_SIDE, x, y):
@@ -185,8 +218,8 @@ def tome_fill(x, y):
         if ribbon and row >= SIDE - 2: return ribbon[0]  # bookmarks come out between the lowest pages
         if row == 0: return COVER_RED_DARK
         if row == SIDE - 1: return BACK
-        if x + .5 < D[0]: return SHADE3 if row == 2 else SHADE2  # left side is in shadow
-        return SHADE2 if row == 2 else PAPER
+        if x + .5 < D[0]: return SHADE3 if row == 3 else SHADE2  # left side is in shadow
+        return SHADE2 if row == 3 else PAPER
     x0 = x
     if x0 in RIBBONS and 0 <= y + .5 - (edge_y(x0) + SIDE) < 2: return RIBBONS[x0][1]  # ribbon tails below the book
     return None
@@ -218,9 +251,12 @@ sprite("page_backward", 18, 10, page_arrow(INK, False))
 sprite("page_backward_highlighted", 18, 10, page_arrow(INK_HOT, False))
 sprite("back", 14, 10, back(INK))
 sprite("back_highlighted", 14, 10, back(INK_HOT))
-sprite("arrow", 22, 15, lambda x, y: INK_SOFT if (x < 14 and 6 <= y <= 8) or (x >= 14 and abs(y - 7) <= (22 - x)) else CLEAR)
+sprite("slot", 18, 18, slot)
+sprite("recipe_panel", 16, 16, rounded(16, 16, PANEL_FILL), nine_slice=4)
+sprite("output_frame", 24, 24, output_frame)
+sprite("chevron", 7, 9, chevron)
 sprite("flame", 14, 14, flame)
-sprite("search_field", 16, 12, search_field, nine_slice=3)
+sprite("search_tab", 32, 24, search_tab, nine_slice=8)
 sprite("search_icon", 9, 9, magnifier)
 save(os.path.join(OUT, "item", "catalog.png"), 16, 16, tome)
 # mod logo for the Mods list: the item icon at 8x (OUT is .../assets/thecatalog/textures, the logo goes in resources/)

@@ -33,15 +33,17 @@ import org.lwjgl.glfw.GLFW;
 /** The open book: an item grid with bookmark tabs, and recipe pages. Every page change turns a page. */
 public class CatalogScreen extends Screen {
     private static final ResourceLocation PAGE_LEFT = sprite("page_left"), PAGE_RIGHT = sprite("page_right"), COVER = sprite("cover"),
-            SEARCH_FIELD = sprite("search_field"), SEARCH_ICON = sprite("search_icon"),
+            SEARCH_TAB = sprite("search_tab"), SEARCH_ICON = sprite("search_icon"),
+            SLOT_BOX = sprite("slot"), RECIPE_PANEL = sprite("recipe_panel"), OUTPUT_FRAME = sprite("output_frame"),
+            CHEVRON = sprite("chevron"),
             TAB = sprite("tab"), TAB_SELECTED = sprite("tab_selected"),
             TAB_RIGHT = sprite("tab_right"), TAB_RIGHT_SELECTED = sprite("tab_right_selected"), TAB_UP = sprite("tab_up"), TAB_DOWN = sprite("tab_down"),
             FORWARD = sprite("page_forward"), FORWARD_HOT = sprite("page_forward_highlighted"),
             BACKWARD = sprite("page_backward"), BACKWARD_HOT = sprite("page_backward_highlighted"),
             BACK = sprite("back"), BACK_HOT = sprite("back_highlighted");
-    private static final int INK = 0xFF4A3524, FAINT_INK = 0xFF9A8462, HOVER = 0x304A3524;
+    private static final int INK = 0xFF4A3524, FAINT_INK = 0xFF9A8462, HOVER = 0x304A3524, BRACE = 0xFFC4A877;
     private static final int SEARCH_TEXT = 0xFF5A4330, SEARCH_HINT = 0xFFB09A74, COVER_BORDER_X = 7, COVER_BORDER_Y = 6;
-    private static final int TAB_HEIGHT = 22, RECIPE_HEADER = 34, RECIPE_GAP = 6;
+    private static final int SEARCH_TAB_INSET = 10, TAB_HEIGHT = 22, RECIPE_HEADER = 34, RECIPE_GAP = 6;
 
     sealed interface View permits IndexView, RecipeView {
         int spread();
@@ -57,6 +59,7 @@ public class CatalogScreen extends Screen {
     private static View lastView = new IndexView(0, "", 0);
     private static final Deque<View> history = new ArrayDeque<>();
     private static int tabScroll;
+    private static int lastTab; // the item grid's bookmark, for searches typed on a recipe page
 
     private final @Nullable Screen parent;
     private final CatalogIndex index = CatalogIndex.get();
@@ -86,14 +89,16 @@ public class CatalogScreen extends Screen {
         lastView = new IndexView(0, "", 0);
         history.clear();
         tabScroll = 0;
+        lastTab = 0;
     }
 
     @Override
     protected void init() {
         layout = BookLayout.fit(width, height, ClientConfig.MAX_COLUMNS.get(), ClientConfig.MAX_ROWS.get(), tabsLeft());
         cache.clear();
-        int x = layout.x() + 48, y = layout.y() + layout.pageHeight() - 21;
-        search = new EditBox(font, x, y, layout.pageWidth() - 48 - MARGIN, 10, Component.translatable("gui.thecatalog.search"));
+        // the search sits on a paper tab hanging under the left page, outside the turning pages
+        int x = layout.x() + SEARCH_TAB_INSET + 16, y = layout.y() + layout.pageHeight() + 9;
+        search = new EditBox(font, x, y, layout.pageWidth() - 2 * SEARCH_TAB_INSET - 20, 10, Component.translatable("gui.thecatalog.search"));
         search.setBordered(false);
         search.setMaxLength(50);
         search.setTextColor(SEARCH_TEXT);
@@ -101,7 +106,12 @@ public class CatalogScreen extends Screen {
         search.setHint(Component.translatable("gui.thecatalog.search").withColor(SEARCH_HINT));
         if (view instanceof IndexView v) search.setValue(v.query());
         search.setResponder(query -> {
-            if (view instanceof IndexView v && !v.query().equals(query)) setView(new IndexView(v.tab(), query, 0));
+            if (view instanceof IndexView v) {
+                if (!v.query().equals(query)) setView(new IndexView(v.tab(), query, 0));
+            } else {
+                history.push(view); // typing on a recipe page goes to the item grid, Back returns
+                setView(new IndexView(lastTab, query, 0));
+            }
         });
         addRenderableWidget(search);
         if (view.spread() >= spreads(view)) setView(withSpread(view, spreads(view) - 1));
@@ -113,6 +123,7 @@ public class CatalogScreen extends Screen {
     private void setView(View next) {
         view = next;
         lastView = next;
+        if (next instanceof IndexView v) lastTab = v.tab();
         updateSearch();
     }
 
@@ -128,9 +139,8 @@ public class CatalogScreen extends Screen {
         setView(next);
     }
 
+    /** Shows the grid's query when the grid is shown; on recipe pages the last query stays visible. */
     private void updateSearch() {
-        search.visible = view instanceof IndexView && flipFrom == null;
-        if (!search.visible) search.setFocused(false);
         if (view instanceof IndexView v && !search.getValue().equals(v.query())) search.setValue(v.query());
     }
 
@@ -244,15 +254,13 @@ public class CatalogScreen extends Screen {
         super.renderBackground(g, mouseX, mouseY, partialTick);
         if (flipFrom != null) mouseX = mouseY = -1; // nothing is hoverable while a page turns
         int bx = layout.x(), by = layout.y(), pw = layout.pageWidth(), ph = layout.pageHeight();
-        // cover, then bookmarks lying on it, then the pages on top of the bookmarks' inner ends
+        // search tab, cover, then bookmarks lying on it, then the pages on top of the bookmarks' inner ends
+        g.blitSprite(SEARCH_TAB, bx + SEARCH_TAB_INSET, by + ph - 8, pw - 2 * SEARCH_TAB_INSET, 8 + BookLayout.SEARCH_HEIGHT);
         g.blitSprite(COVER, bx - COVER_BORDER_X, by - COVER_BORDER_Y, 2 * pw + 2 * COVER_BORDER_X, ph + 2 * COVER_BORDER_Y);
         drawTabs(g, mouseX, mouseY);
         g.blitSprite(PAGE_LEFT, bx, by, pw, ph);
         g.blitSprite(PAGE_RIGHT, bx + pw, by, pw, ph);
-        if (search.visible) {
-            g.blitSprite(SEARCH_FIELD, search.getX() - 13, search.getY() - 3, search.getWidth() + 15, 14);
-            g.blitSprite(SEARCH_ICON, search.getX() - 11, search.getY() - 1, 9, 9);
-        }
+        g.blitSprite(SEARCH_ICON, search.getX() - 13, search.getY() - 1, 9, 9);
         if (flipFrom == null) {
             drawPage(g, view, 0, mouseX, mouseY);
             drawPage(g, view, 1, mouseX, mouseY);
@@ -382,12 +390,32 @@ public class CatalogScreen extends Screen {
         hotspots.add(new Hotspot(x, y - 1, w, 11, action));
     }
 
+    /** Caption; input slots in a rounded panel; a brace, a chevron and the framed output, centered on the grid. */
     private void drawRecipe(GuiGraphics g, DisplayRecipe recipe, int x, int y, int width, int mouseX, int mouseY) {
         g.drawString(font, trim(recipe.caption, width), x, y, FAINT_INK, false);
+        int top = y + DisplayRecipe.CAPTION, bottom = top + recipe.panelHeight, right = x + recipe.panelWidth;
+        g.blitSprite(RECIPE_PANEL, x, top, recipe.panelWidth, recipe.panelHeight);
+        for (DisplayRecipe.Slot slot : recipe.inputs) {
+            g.blitSprite(SLOT_BOX, x + slot.x(), y + slot.y(), SLOT, SLOT);
+            drawStack(g, slot.shown(), x + slot.x(), y + slot.y(), mouseX, mouseY);
+        }
+        int outX = x + recipe.output.x(), outY = y + recipe.output.y(), mid = outY + SLOT / 2;
+        drawBrace(g, right + 1, top, bottom);
+        g.blitSprite(CHEVRON, right + 7, mid - 4, 7, 9);
+        g.blitSprite(OUTPUT_FRAME, outX - 3, outY - 3, 24, 24);
+        drawStack(g, recipe.shownOutput(), outX, outY, mouseX, mouseY);
         for (DisplayRecipe.Picture p : recipe.pictures) g.blitSprite(p.sprite(), x + p.x(), y + p.y(), p.width(), p.height());
-        for (DisplayRecipe.Slot slot : recipe.inputs) drawStack(g, slot.shown(), x + slot.x(), y + slot.y(), mouseX, mouseY);
-        drawStack(g, recipe.shownOutput(), x + recipe.output.x(), y + recipe.output.y(), mouseX, mouseY);
         if (recipe.note != null) g.drawString(font, recipe.note, x + recipe.noteX, y + recipe.noteY, FAINT_INK, false);
+    }
+
+    /** A "}" as tall as the input panel, pointing at the chevron. */
+    private static void drawBrace(GuiGraphics g, int x, int top, int bottom) {
+        int mid = (top + bottom) / 2;
+        g.fill(x, top + 1, x + 2, top + 2, BRACE);
+        g.fill(x + 1, top + 2, x + 2, mid - 1, BRACE);
+        g.fill(x + 2, mid - 1, x + 3, mid + 1, BRACE);
+        g.fill(x + 1, mid + 1, x + 2, bottom - 2, BRACE);
+        g.fill(x, bottom - 2, x + 2, bottom - 1, BRACE);
     }
 
     private void drawStack(GuiGraphics g, ItemStack stack, int x, int y, int mouseX, int mouseY) {
@@ -418,7 +446,7 @@ public class CatalogScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        if (search.visible && search.isMouseOver(mouseX, mouseY)) {
+        if (search.isMouseOver(mouseX, mouseY)) {
             if (button == GLFW.GLFW_MOUSE_BUTTON_RIGHT) search.setValue("");
             return super.mouseClicked(mouseX, mouseY, button);
         }

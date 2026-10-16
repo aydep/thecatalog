@@ -25,6 +25,7 @@ class CatalogLogicTest {
         assertEquals(142, small.pageWidth());
         assertEquals(BookLayout.MIN_COLUMNS, small.cols());
         assertTrue(small.x() - BookLayout.TAB_WIDTH >= 0 && small.x() + 2 * small.pageWidth() <= 320);
+        assertTrue(small.y() >= 0 && small.y() + small.pageHeight() + BookLayout.SEARCH_HEIGHT <= 240); // search tab fits below
         BookLayout right = BookLayout.fit(320, 240, 9, 10, false);
         assertTrue(right.x() >= 0 && right.x() + 2 * right.pageWidth() + BookLayout.TAB_WIDTH <= 320);
         BookLayout big = BookLayout.fit(1000, 600, 9, 10, true); // the configured columns/rows are met exactly

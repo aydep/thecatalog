@@ -27,7 +27,11 @@ import org.jetbrains.annotations.Nullable;
 public final class DisplayRecipe {
     public static final int CAPTION = 11;
     private static final int S = BookLayout.SLOT;
-    static final ResourceLocation ARROW = sprite("arrow"), FLAME = sprite("flame");
+    /** Padding between the input panel's edge and its slots. */
+    public static final int PAD = 3;
+    /** From the panel's right edge: brace at +1, chevron at +7, output frame at +16 (24px wide), output slot at +19. */
+    public static final int OUTPUT_FROM_PANEL = 19, AFTER_PANEL = 40;
+    static final ResourceLocation FLAME = sprite("flame");
 
     /** A slot that cycles through its stacks once a second, e.g. "any planks". */
     public record Slot(int x, int y, List<ItemStack> stacks) {
@@ -46,7 +50,7 @@ public final class DisplayRecipe {
     public Slot output;
     private @Nullable Supplier<ItemStack> liveOutput;
     public @Nullable Component note;
-    public int noteX, noteY, width, height;
+    public int noteX, noteY, panelWidth, panelHeight, height;
 
     private DisplayRecipe(Component caption, List<ItemStack> results) {
         this.caption = caption;
@@ -90,45 +94,36 @@ public final class DisplayRecipe {
 
     private static DisplayRecipe crafting(Component caption, List<List<ItemStack>> ingredients, ItemStack result, int shapedWidth) {
         int n = ingredients.size();
-        int w = shapedWidth > 0 ? shapedWidth : n > 4 ? 3 : n > 1 ? 2 : 1;
-        int h = Math.max(1, (n + w - 1) / w);
-        DisplayRecipe d = new DisplayRecipe(caption, List.of(result));
-        for (int i = 0; i < n; i++) {
-            if (!ingredients.get(i).isEmpty()) d.inputs.add(new Slot(i % w * S, CAPTION + i / w * S, ingredients.get(i)));
-        }
-        int mid = CAPTION + (h - 1) * S / 2;
-        d.pictures.add(new Picture(ARROW, 3 * S + 6, mid + 1, 22, 15));
-        d.output = new Slot(3 * S + 34, mid, List.of(result));
-        d.width = 3 * S + 34 + S;
-        d.height = CAPTION + h * S;
-        return d;
+        int cols = shapedWidth > 0 ? shapedWidth : n > 4 ? 3 : n > 1 ? 2 : 1;
+        List<List<ItemStack>> cells = new ArrayList<>(ingredients);
+        while (cells.size() % cols != 0) cells.add(List.of()); // complete the last row so the grid is a rectangle
+        return grid(caption, cells, cols, result, List.of(result));
     }
 
     private static DisplayRecipe cooking(Component caption, List<ItemStack> input, ItemStack result, AbstractCookingRecipe cooking) {
-        DisplayRecipe d = new DisplayRecipe(caption, List.of(result));
-        d.inputs.add(new Slot(0, CAPTION, input));
-        d.pictures.add(new Picture(FLAME, 2, CAPTION + S + 1, 14, 14));
-        d.pictures.add(new Picture(ARROW, S + 6, CAPTION + 10, 22, 15));
-        d.output = new Slot(S + 34, CAPTION + 9, List.of(result));
+        DisplayRecipe d = grid(caption, List.of(input), 1, result, List.of(result));
+        d.pictures.add(new Picture(FLAME, PAD + 2, d.height + 2, 14, 14)); // under the input panel
         d.note = Component.translatable("gui.thecatalog.cooking", number(cooking.getCookingTime() / 20f), number(cooking.getExperience()));
-        d.noteX = S + 6;
-        d.noteY = CAPTION + 2 * S + 1;
-        d.width = S + 34 + S;
-        d.height = CAPTION + 2 * S + 10;
+        d.noteX = PAD + 20;
+        d.noteY = d.height + 5;
+        d.height += 16;
         return d;
     }
 
-    /** Inputs in rows of four, then an arrow and the output. Used for every recipe type without its own layout. */
+    /** Inputs in rows of four. Used for every recipe type without its own layout. */
     private static DisplayRecipe simple(Component caption, List<List<ItemStack>> inputs, ItemStack shownResult, List<ItemStack> results) {
-        int cols = Math.clamp(inputs.size(), 1, 4);
-        int rows = Math.max(1, (inputs.size() + 3) / 4);
+        return grid(caption, inputs, Math.clamp(inputs.size(), 1, 4), shownResult, results);
+    }
+
+    /** Input slots in a panel, then (drawn by the screen) a brace, a chevron and the output in a frame, centered on the grid. */
+    private static DisplayRecipe grid(Component caption, List<List<ItemStack>> inputs, int cols, ItemStack shownResult, List<ItemStack> results) {
+        int rows = Math.max(1, (inputs.size() + cols - 1) / cols);
         DisplayRecipe d = new DisplayRecipe(caption, results);
-        for (int i = 0; i < inputs.size(); i++) d.inputs.add(new Slot(i % 4 * S, CAPTION + i / 4 * S, inputs.get(i)));
-        int mid = CAPTION + (rows - 1) * S / 2;
-        d.pictures.add(new Picture(ARROW, cols * S + 2, mid + 1, 22, 15));
-        d.output = new Slot(cols * S + 28, mid, List.of(shownResult));
-        d.width = cols * S + 28 + S;
-        d.height = CAPTION + rows * S;
+        for (int i = 0; i < inputs.size(); i++) d.inputs.add(new Slot(PAD + i % cols * S, CAPTION + PAD + i / cols * S, inputs.get(i)));
+        d.panelWidth = cols * S + 2 * PAD;
+        d.panelHeight = rows * S + 2 * PAD;
+        d.output = new Slot(d.panelWidth + OUTPUT_FROM_PANEL, CAPTION + PAD + (rows - 1) * S / 2, List.of(shownResult));
+        d.height = CAPTION + d.panelHeight;
         return d;
     }
 

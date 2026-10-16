@@ -3,7 +3,7 @@
 All GUI sprites live in `src/main/resources/assets/thecatalog/textures/gui/sprites/` and are drawn by
 `tools/placeholders.py`. To repaint one, replace its PNG. Keep the size, except for the 9-slice sprites (see below).
 
-**9-slice sprites** (`cover`, `page_left`, `page_right`, `search_field`) keep their corners as drawn. Their edges and
+**9-slice sprites** (`cover`, `page_left`, `page_right`, `recipe_panel`, `search_tab`) keep their corners as drawn. Their edges and
 middle are **tiled** (repeated) to fit the screen, not stretched, so patterns along an edge (stitches, dotted lines)
 should repeat cleanly. The border width is set in each `.png.mcmeta`. If you change a sprite's size, update `width`
 and `height` there too.
@@ -20,15 +20,18 @@ and `height` there too.
 | `page_forward.png` / `_highlighted` | 18×10 | Next page arrow (normal / mouse over). |
 | `page_backward.png` / `_highlighted` | 18×10 | Previous page arrow. |
 | `back.png` / `back_highlighted` | 14×10 | "Back" (history) button on recipe pages. |
-| `search_field.png` | 16×12 (9-slice, 3px border) | Inset field behind the search text. |
+| `search_tab.png` | 32×24 (9-slice, 8px border) | Paper tab hanging under the left page that holds the search. Its top 14px are hidden behind the page and cover. |
 | `search_icon.png` | 9×9 | Magnifier at the left of the search field. |
-| `arrow.png` | 22×15 | Ink arrow between ingredients and result. |
+| `slot.png` | 18×18 | Box behind each recipe ingredient. |
+| `recipe_panel.png` | 16×16 (9-slice, 4px border) | Rounded panel around a recipe's ingredient slots. |
+| `chevron.png` | 7×9 | ">" between the ingredient panel and the result. (The "}" brace before it is drawn in code, color `BRACE`.) |
+| `output_frame.png` | 24×24 | Framed slot for the recipe's result; the item sits at x=4, y=4. |
 | `flame.png` | 14×14 | Flame under furnace inputs. |
 
 Item: `src/main/resources/assets/thecatalog/textures/item/catalog.png`, 16×16.
 Mod logo in the Mods list: `src/main/resources/logo.png`, 128×128 (the item icon at 8×, drawn without blur).
 
-Text colors are in `CatalogScreen.java`: `INK`, `FAINT_INK`, `SEARCH_TEXT` and `SEARCH_HINT`.
+Colors in `CatalogScreen.java`: `INK`, `FAINT_INK`, `SEARCH_TEXT`, `SEARCH_HINT` and `BRACE`.
 
 Regenerate all sprites with:
 `python tools/placeholders.py src/main/resources/assets/thecatalog/textures`
