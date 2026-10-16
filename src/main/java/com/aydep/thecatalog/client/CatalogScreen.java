@@ -32,12 +32,14 @@ import org.lwjgl.glfw.GLFW;
 
 /** The open book: an item grid with bookmark tabs, and recipe pages. Every page change turns a page. */
 public class CatalogScreen extends Screen {
-    private static final ResourceLocation PAGE_LEFT = sprite("page_left"), PAGE_RIGHT = sprite("page_right"),
+    private static final ResourceLocation PAGE_LEFT = sprite("page_left"), PAGE_RIGHT = sprite("page_right"), COVER = sprite("cover"),
+            SEARCH_FIELD = sprite("search_field"), SEARCH_ICON = sprite("search_icon"),
             TAB = sprite("tab"), TAB_SELECTED = sprite("tab_selected"), TAB_UP = sprite("tab_up"), TAB_DOWN = sprite("tab_down"),
             FORWARD = sprite("page_forward"), FORWARD_HOT = sprite("page_forward_highlighted"),
             BACKWARD = sprite("page_backward"), BACKWARD_HOT = sprite("page_backward_highlighted"),
             BACK = sprite("back"), BACK_HOT = sprite("back_highlighted");
-    private static final int INK = 0xFF3B2A1A, FAINT_INK = 0xFF8A7458, HOVER = 0x303B2A1A;
+    private static final int INK = 0xFF4A3524, FAINT_INK = 0xFF9A8462, HOVER = 0x304A3524;
+    private static final int SEARCH_TEXT = 0xFF5A4330, SEARCH_HINT = 0xFFB09A74, COVER_BORDER_X = 7, COVER_BORDER_Y = 6;
     private static final int TAB_HEIGHT = 22, RECIPE_HEADER = 34, RECIPE_GAP = 6;
 
     sealed interface View permits IndexView, RecipeView {
@@ -89,12 +91,13 @@ public class CatalogScreen extends Screen {
     protected void init() {
         layout = BookLayout.fit(width, height, ClientConfig.MAX_PAGE_WIDTH.get(), ClientConfig.MAX_PAGE_HEIGHT.get(), tabsLeft());
         cache.clear();
-        int x = layout.x() + 34, y = layout.y() + layout.pageHeight() - 21;
-        search = new EditBox(font, x, y, layout.pageWidth() - 34 - MARGIN, 10, Component.translatable("gui.thecatalog.search"));
+        int x = layout.x() + 48, y = layout.y() + layout.pageHeight() - 21;
+        search = new EditBox(font, x, y, layout.pageWidth() - 48 - MARGIN, 10, Component.translatable("gui.thecatalog.search"));
         search.setBordered(false);
         search.setMaxLength(50);
-        search.setTextColor(INK);
-        search.setHint(Component.translatable("gui.thecatalog.search").withColor(FAINT_INK));
+        search.setTextColor(SEARCH_TEXT);
+        search.setTextShadow(false);
+        search.setHint(Component.translatable("gui.thecatalog.search").withColor(SEARCH_HINT));
         if (view instanceof IndexView v) search.setValue(v.query());
         search.setResponder(query -> {
             if (view instanceof IndexView v && !v.query().equals(query)) setView(new IndexView(v.tab(), query, 0));
@@ -240,9 +243,15 @@ public class CatalogScreen extends Screen {
         super.renderBackground(g, mouseX, mouseY, partialTick);
         if (flipFrom != null) mouseX = mouseY = -1; // nothing is hoverable while a page turns
         int bx = layout.x(), by = layout.y(), pw = layout.pageWidth(), ph = layout.pageHeight();
+        // cover, then bookmarks lying on it, then the pages on top of the bookmarks' inner ends
+        g.blitSprite(COVER, bx - COVER_BORDER_X, by - COVER_BORDER_Y, 2 * pw + 2 * COVER_BORDER_X, ph + 2 * COVER_BORDER_Y);
         drawTabs(g, mouseX, mouseY);
         g.blitSprite(PAGE_LEFT, bx, by, pw, ph);
         g.blitSprite(PAGE_RIGHT, bx + pw, by, pw, ph);
+        if (search.visible) {
+            g.blitSprite(SEARCH_FIELD, search.getX() - 13, search.getY() - 3, search.getWidth() + 15, 14);
+            g.blitSprite(SEARCH_ICON, search.getX() - 11, search.getY() - 1, 9, 9);
+        }
         if (flipFrom == null) {
             drawPage(g, view, 0, mouseX, mouseY);
             drawPage(g, view, 1, mouseX, mouseY);
@@ -291,7 +300,7 @@ public class CatalogScreen extends Screen {
         for (int i = tabScroll; i < Math.min(tabs.size(), tabScroll + visible); i++) {
             int x = tx + (i == current ? outward : 0), y = top + (i - tabScroll) * TAB_HEIGHT;
             g.blitSprite(i == current ? TAB_SELECTED : TAB, x, y, 26, TAB_HEIGHT);
-            g.renderItem(tabs.get(i).icon(), x + (visibleX - tx) + 3, y + 3);
+            g.renderItem(tabs.get(i).icon(), x + 5, y + 3);
             if (inside(mouseX, mouseY, x, y, 26, TAB_HEIGHT)) hoveredText = tabs.get(i).name();
             int tab = i;
             hotspots.add(new Hotspot(x, y, 26, TAB_HEIGHT, () -> selectTab(tab)));
