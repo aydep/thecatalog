@@ -608,13 +608,14 @@ public class CatalogScreen extends Screen {
     }
 
     /**
-     * Depth chart: the dimension's full height as a rock column (stone above Y 0, deepslate below), the ore's frequency
-     * at each height beside it, and a dashed line with the ore's icon at the most common height.
+     * Depth chart over the ore's own height range: a rock column (stone above Y 0, deepslate below), the ore's
+     * frequency at each height beside it, a dashed line with the ore's icon at the most common height, and the deepest,
+     * highest and most common heights listed underneath.
      */
     private void drawGeneration(GuiGraphics g, Generation gen, int x, int y, int width, int mouseX, int mouseY) {
         g.renderItem(gen.dimensionIcon(), x, y);
         g.drawString(font, trim(gen.where(), width - 20), x + 20, y + 4, INK, false);
-        int top = gen.top(), bottom = gen.bottom(), chartTop = y + Generation.HEADER, h = Generation.CHART;
+        int top = gen.chartTop(), bottom = gen.chartBottom(), chartTop = y + Generation.HEADER + Generation.GAP, h = Generation.CHART;
         int axis = x + 24, plotX = axis + 6, plotW = width - (plotX - x) - 20;
         double max = 0;
         for (int row = 0; row < h; row++) max = Math.max(max, gen.density(worldY(row, top, bottom, h)));
@@ -627,9 +628,9 @@ public class CatalogScreen extends Screen {
                 g.fill(plotX, chartTop + row, plotX + w, chartTop + row + 1, gen.color());
             }
         }
-        // height marks: top, sea level, Y 0, bottom
-        for (int mark : new java.util.TreeSet<>(List.of(top, bottom, 0, 64))) {
-            if (mark < bottom || mark > top || (mark == 64 && bottom != -64)) continue;
+        // height marks: where the ore starts and ends, and Y 0 (stone above, deepslate below) if it is in range
+        for (int mark : new java.util.TreeSet<>(List.of(gen.high(), gen.low(), 0))) {
+            if (mark < bottom || mark > top) continue;
             int py = chartTop + chartRow(mark, top, bottom, h);
             g.fill(axis - 2, py, axis, py + 1, FAINT_INK);
             String label = String.valueOf(mark);
@@ -642,9 +643,10 @@ public class CatalogScreen extends Screen {
         int peakRow = chartTop + chartRow(gen.peak(), top, bottom, h);
         for (int dx = axis; dx < plotX + plotW; dx += 3) g.fill(dx, peakRow, dx + 2, peakRow + 1, INK);
         drawStack(g, gen.stack, plotX + plotW + 1, peakRow - SLOT / 2, mouseX, mouseY);
-        Component summary = Component.translatable("gui.thecatalog.gen_range", gen.low(), gen.high())
-                .append(" · ").append(Component.translatable("gui.thecatalog.gen_peak", gen.peak()));
-        g.drawString(font, trim(summary, width), x, chartTop + h + 3, INK, false);
+        int lineY = chartTop + h + 4;
+        g.drawString(font, trim(Component.translatable("gui.thecatalog.gen_deepest", gen.low()), width), x, lineY, INK, false);
+        g.drawString(font, trim(Component.translatable("gui.thecatalog.gen_highest", gen.high()), width), x, lineY + 10, INK, false);
+        g.drawString(font, trim(Component.translatable("gui.thecatalog.gen_peak", gen.peak()), width), x, lineY + 20, INK, false);
     }
 
     /** The world height shown by a chart row (row 0 is the top). */

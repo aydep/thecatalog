@@ -1397,6 +1397,7 @@
   "gui.thecatalog.dimension.overworld": "Overworld",
   "gui.thecatalog.dimension.the_nether": "Nether",
   "gui.thecatalog.dimension.the_end": "The End",
-  "gui.thecatalog.gen_range": "Y %s to %s",
-  "gui.thecatalog.gen_peak": "most at Y %s"
+  "gui.thecatalog.gen_peak": "Most at: Y %s",
+  "gui.thecatalog.gen_deepest": "Max depth: Y %s",
+  "gui.thecatalog.gen_highest": "Min depth: Y %s"
 }

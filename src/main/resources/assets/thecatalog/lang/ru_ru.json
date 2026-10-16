@@ -1409,6 +1409,7 @@
   "gui.thecatalog.dimension.overworld": "Верхний мир",
   "gui.thecatalog.dimension.the_nether": "Незер",
   "gui.thecatalog.dimension.the_end": "Энд",
-  "gui.thecatalog.gen_range": "Y от %s до %s",
-  "gui.thecatalog.gen_peak": "чаще всего на Y %s"
+  "gui.thecatalog.gen_peak": "Чаще всего: Y %s",
+  "gui.thecatalog.gen_deepest": "Макс. глубина: Y %s",
+  "gui.thecatalog.gen_highest": "Мин. глубина: Y %s"
 }

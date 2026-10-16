@@ -36,7 +36,8 @@ public final class Generation implements RecipeEntry {
 
     public record Data(String dimension, @Nullable List<String> biomes, @Nullable String color, @Nullable Integer peak, List<Spread> spreads) {}
 
-    static final int HEADER = 18, CHART = 80, FOOTER = 12;
+    /** Header row, gap below it, chart height, and the three value lines under the chart. */
+    static final int HEADER = 18, GAP = 6, CHART = 80, LINES = 3;
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final Gson GSON = new Gson();
     private static final String FOLDER = "thecatalog/worldgen";
@@ -142,9 +143,22 @@ public final class Generation implements RecipeEntry {
         return Component.translatable("gui.thecatalog.dimension." + dim.getPath()).append(" · ").append(biomes);
     }
 
+    /** The chart shows only the ore's own range plus a small margin, clamped to the dimension. */
+    int chartTop() {
+        return Math.min(top(), high() + margin());
+    }
+
+    int chartBottom() {
+        return Math.max(bottom(), low() - margin());
+    }
+
+    private int margin() {
+        return Math.max(2, (high() - low()) / 16);
+    }
+
     @Override
     public int pageHeight(int width) {
-        return HEADER + CHART + FOOTER;
+        return HEADER + GAP + CHART + 4 + LINES * 10;
     }
 
     @Override
