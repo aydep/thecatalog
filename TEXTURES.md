@@ -29,8 +29,11 @@ and `height` there too.
 | `chevron.png` | 7×9 | ">" between the ingredient panel and the result. (The "}" brace before it is drawn in code, color `BRACE`.) |
 | `output_frame.png` | 24×24 | Framed slot for the recipe's result; the item sits at x=4, y=4. |
 | `flame.png` | 14×14 | Flame under furnace inputs. |
+| `craft.png` / `craft_highlighted` | 11×11 | "+" beside a recipe in the side panel: puts its ingredients into the crafting grid or furnace. |
+| `tree.png` / `tree_highlighted` | 11×11 | Recipe tree button at the right of the item's name on recipe pages. (Tree steps are framed with `recipe_panel`.) |
 
 Item: `src/main/resources/assets/thecatalog/textures/item/catalog.png`, 16×16.
+Recipe book button (replaces vanilla's, so every inventory shows the Catalog): `src/main/resources/assets/minecraft/textures/gui/sprites/recipe_book/button.png` and `button_highlighted.png`, 20×18.
 Mod logo in the Mods list: `src/main/resources/logo.png`, 128×128 (the item icon at 8×, drawn without blur).
 
 Colors in `CatalogScreen.java`: `INK`, `FAINT_INK`, `SEARCH_TEXT`, `SEARCH_HINT` and `BRACE`.

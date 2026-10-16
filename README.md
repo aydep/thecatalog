@@ -23,6 +23,12 @@ Creative mode; in Survival and Adventure the book replaces it.
 - Lookup from any inventory: hover an item and press `R` (recipes) or `U` (uses).
 - The recipe book button beside inventories, crafting tables and furnaces opens a one-page Catalog in place of the
   vanilla recipe book (item grid, search and recipes; `R` / `U` show items there while it is open).
+- Shown there, a **+** beside each recipe the grid or furnace can take puts its ingredients in from your inventory
+  (Shift+click: as many as you have), even for recipes not unlocked in the vanilla recipe book. The button is only
+  there while you carry the Catalog.
+- **Recipe tree**: the tree icon by an item's name breaks a craft down into every step, with the total cost in base
+  ingredients and the leftovers. Click a step for its next recipe, right-click to stop breaking it down, scroll or
+  `-` / `+` for more crafts, drag to move around.
 - Recipe index built in the background, so opening the book never freezes the game, even in large modpacks.
 - English and Russian.
 

@@ -39,6 +39,8 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.food.FoodProperties;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.inventory.RecipeBookMenu;
+import net.minecraft.core.component.DataComponentPatch;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.neoforged.neoforge.network.PacketDistributor;
@@ -56,7 +58,7 @@ public class CatalogScreen extends Screen {
             SEARCH_TAB = sprite("search_tab"), SEARCH_ICON = sprite("search_icon"),
             SLOT_BOX = sprite("slot"), RECIPE_PANEL = sprite("recipe_panel"), OUTPUT_FRAME = sprite("output_frame"),
             CHEVRON = sprite("chevron"), TAB_TOP = sprite("tab_top"), TAB_TOP_SELECTED = sprite("tab_top_selected"),
-            TAB_PREV = sprite("tab_prev"), TAB_NEXT = sprite("tab_next"),
+            TAB_PREV = sprite("tab_prev"), TAB_NEXT = sprite("tab_next"), TREE = sprite("tree"), TREE_HOT = sprite("tree_highlighted"),
             TAB = sprite("tab"), TAB_SELECTED = sprite("tab_selected"),
             TAB_RIGHT = sprite("tab_right"), TAB_RIGHT_SELECTED = sprite("tab_right_selected"), TAB_UP = sprite("tab_up"), TAB_DOWN = sprite("tab_down"),
             FORWARD = sprite("page_forward"), FORWARD_HOT = sprite("page_forward_highlighted"),
@@ -68,9 +70,11 @@ public class CatalogScreen extends Screen {
     // drawn TAB_SHIFT further out, still reaches under it.
     private static final int TAB_SPRITE = 40, TAB_TUCK = 12, TAB_SHIFT = 6;
     private static final int TOP_TAB_WIDTH = 22, TOP_TAB_STEP = 23;
+    // tree layout: a crafted step's box, a base item's width, the gap between neighbours, one level's height, the totals band
+    private static final int NODE_W = 40, NODE_H = 22, BASE_W = 20, TREE_GAP = 4, LEVEL = 34, TREE_TOP = 22, TOTALS = 50;
     private static final int SEARCH_TAB_INSET = 10, TAB_HEIGHT = 22, RECIPE_HEADER = 34, RECIPE_GAP = 6, CRAFT_COLUMN = 13;
 
-    sealed interface View permits IndexView, RecipeView {
+    sealed interface View permits IndexView, RecipeView, TreeView {
         int spread();
     }
 
@@ -79,7 +83,23 @@ public class CatalogScreen extends Screen {
     /** {@code category}: which category bookmark is open, an index into that item's categories. */
     record RecipeView(ItemStack stack, boolean uses, int category, int spread) implements View {}
 
+    /** The recipe tree across the spread; the tree itself changes as the player picks recipes. */
+    record TreeView(RecipeTree<TreeKey> tree, int spread) implements View {}
+
+    /** An item in a recipe tree: potions and other items with components stay apart. */
+    record TreeKey(Item item, DataComponentPatch components) {
+        static TreeKey of(ItemStack stack) {
+            return new TreeKey(stack.getItem(), stack.getComponentsPatch());
+        }
+
+        ItemStack stack() {
+            return new ItemStack(BuiltInRegistries.ITEM.wrapAsHolder(item), 1, components);
+        }
+    }
+
     private record Hotspot(int x, int y, int w, int h, Runnable action) {}
+
+    private record TreeHit(int x, int y, int w, int h, TreeKey key) {}
 
     /** Remembered while the game runs, so the book reopens where it was left, Back history included. */
     private static final class Memory {
@@ -118,13 +138,17 @@ public class CatalogScreen extends Screen {
     private ItemStack hovered = ItemStack.EMPTY;
     private @Nullable ExternalRecipes.Entry hoveredExternal; // a JEI recipe under the mouse draws its own tooltips
     private @Nullable Component hoveredText;
+    private @Nullable Component hoveredHelp; // an extra line under the hovered item's tooltip
+    private final List<TreeHit> treeHits = new ArrayList<>();
+    private @Nullable TreeView panned; // the tree the pan offset belongs to
+    private double panX, panY;
 
     /** @param parent screen to return to on close; @param start page to open on, or null for where the book was left */
-    public CatalogScreen(@Nullable Screen parent, @Nullable RecipeView start) {
+    public CatalogScreen(@Nullable Screen parent, @Nullable View start) {
         this(parent, start, false, 0, 0);
     }
 
-    private CatalogScreen(@Nullable Screen parent, @Nullable RecipeView start, boolean compact, int panelX, int panelY) {
+    private CatalogScreen(@Nullable Screen parent, @Nullable View start, boolean compact, int panelX, int panelY) {
         super(Component.translatable("item.thecatalog.catalog"));
         this.parent = parent;
         this.compact = compact;
@@ -256,6 +280,7 @@ public class CatalogScreen extends Screen {
         return switch (v) {
             case IndexView i -> new IndexView(i.tab(), i.query(), spread);
             case RecipeView r -> new RecipeView(r.stack(), r.uses(), r.category(), spread);
+            case TreeView t -> t;
         };
     }
 
@@ -365,6 +390,7 @@ public class CatalogScreen extends Screen {
         int pages = switch (v) {
             case IndexView i -> (items(i).size() + layout.perPage() - 1) / layout.perPage();
             case RecipeView r -> recipePages(r).size();
+            case TreeView t -> 1;
         };
         return compact ? Math.max(1, pages) : BookLayout.spreads(pages);
     }
@@ -411,13 +437,16 @@ public class CatalogScreen extends Screen {
         hovered = ItemStack.EMPTY;
         hoveredExternal = null;
         hoveredText = null;
+        hoveredHelp = null;
         hotspots.clear();
+        treeHits.clear();
         super.render(g, mouseX, mouseY, partialTick); // the book (renderBackground), then the search box
         if (hoveredExternal != null && hoveredExternal.drawTooltip(g, mouseX, mouseY)) {
             // JEI drew its own tooltip (fluids, chances, tag lists...)
         } else if (!hovered.isEmpty()) {
             List<Component> lines = new ArrayList<>(getTooltipFromItem(minecraft, hovered));
             if (ClientConfig.SHOW_MOD_NAME.get()) lines.add(Component.literal(CatalogIndex.modName(CatalogIndex.modId(hovered))).withStyle(ChatFormatting.BLUE, ChatFormatting.ITALIC));
+            if (hoveredHelp != null) lines.add(hoveredHelp.copy().withStyle(ChatFormatting.GRAY));
             g.renderTooltip(font, lines, hovered.getTooltipImage(), hovered, mouseX, mouseY);
         } else if (hoveredText != null) {
             g.renderTooltip(font, font.split(hoveredText, 220), mouseX, mouseY);
@@ -551,6 +580,10 @@ public class CatalogScreen extends Screen {
         switch (v) {
             case IndexView i -> drawIndexPage(g, i, side, px, py, mouseX, mouseY);
             case RecipeView r -> drawRecipePage(g, r, side, px, py, mouseX, mouseY);
+            case TreeView t -> {
+                drawTreePage(g, t, side, px, py, mouseX, mouseY);
+                return; // one spread: no page arrows or number
+            }
         }
         int spreads = spreads(v), footerY = py + layout.pageHeight() - 21;
         if (side == 0 && v.spread() > 0) {
@@ -621,7 +654,12 @@ public class CatalogScreen extends Screen {
             if (inside(mouseX, mouseY, x, y + 3, 14, 10)) hoveredText = Component.translatable("gui.thecatalog.back");
         }
         drawStack(g, v.stack(), x + 16, y - 1, mouseX, mouseY);
-        g.drawString(font, trim(v.stack().getHoverName(), width - 36), x + 36, y + 4, INK, false);
+        boolean craftable = !index.recipesFor(v.stack()).isEmpty();
+        g.drawString(font, trim(v.stack().getHoverName(), width - 36 - (craftable ? 14 : 0)), x + 36, y + 4, INK, false);
+        if (craftable) {
+            button(g, TREE, TREE_HOT, x + width - 11, y + 2, 11, 11, mouseX, mouseY, () -> openTree(v.stack()));
+            if (inside(mouseX, mouseY, x + width - 11, y + 2, 11, 11)) hoveredText = Component.translatable("gui.thecatalog.tree");
+        }
         Component recipes = Component.translatable("gui.thecatalog.recipes"), uses = Component.translatable("gui.thecatalog.uses");
         modeToggle(g, recipes, x, y + 22, !v.uses(), mouseX, mouseY, () -> switchMode(v, false));
         modeToggle(g, uses, x + font.width(recipes) + 10, y + 22, v.uses(), mouseX, mouseY, () -> switchMode(v, true));
@@ -672,6 +710,156 @@ public class CatalogScreen extends Screen {
         int maxLines = (int) ((bottom - y) / (font.lineHeight * scale));
         for (int i = 0; i < Math.min(lines.size(), maxLines); i++) g.drawString(font, lines.get(i), 0, i * font.lineHeight, INK, false);
         g.pose().popPose();
+    }
+
+    // ---- recipe tree ----
+
+    /** Opens the item's recipe tree; from the side panel, in the full book (the tree needs the whole spread). */
+    private void openTree(ItemStack stack) {
+        RecipeTree<TreeKey> tree = new RecipeTree<>(TreeKey.of(stack), this::treeSteps);
+        if (tree.top() == null) return;
+        TreeView next = new TreeView(tree, 0);
+        if (compact) {
+            minecraft.setScreen(new CatalogScreen(minecraft.screen, next));
+            return;
+        }
+        memory.history.push(view);
+        flipTo(next, true);
+    }
+
+    /** The item's recipes from The Catalog's own index, crafting-table ones first; a tag slot counts as its first item. */
+    private List<RecipeTree.Step<TreeKey>> treeSteps(TreeKey key) {
+        ItemStack stack = key.stack();
+        List<DisplayRecipe> found = new ArrayList<>(index.recipesFor(stack));
+        found.sort(Comparator.comparing(d -> !CRAFTING.equals(d.category())));
+        List<RecipeTree.Step<TreeKey>> steps = new ArrayList<>();
+        for (DisplayRecipe d : found) {
+            int count = d.output.stacks().stream().filter(s -> s.is(stack.getItem())).mapToInt(ItemStack::getCount).findFirst().orElse(1);
+            List<RecipeTree.Amount<TreeKey>> inputs = new ArrayList<>();
+            for (DisplayRecipe.Slot slot : d.inputs) {
+                if (!slot.stacks().isEmpty()) inputs.add(new RecipeTree.Amount<>(TreeKey.of(slot.stacks().get(0)), slot.stacks().get(0).getCount()));
+            }
+            // shortcut: what a recipe gives back (the bucket of a milk bucket) is not counted, add it if trees look wrong for such items
+            if (!inputs.isEmpty()) steps.add(new RecipeTree.Step<>(key, Math.max(1, count), inputs, d));
+        }
+        return steps;
+    }
+
+    private int nodeWidth(RecipeTree.Node<TreeKey> node) {
+        return node.step() == null ? BASE_W : NODE_W;
+    }
+
+    private int subtreeWidth(RecipeTree.Node<TreeKey> node, Map<RecipeTree.Node<TreeKey>, Integer> widths) {
+        Integer known = widths.get(node);
+        if (known != null) return known;
+        int children = -TREE_GAP;
+        for (RecipeTree.Node<TreeKey> child : node.children()) children += subtreeWidth(child, widths) + TREE_GAP;
+        int width = Math.max(nodeWidth(node), children);
+        widths.put(node, width);
+        return width;
+    }
+
+    /**
+     * The tree on one page of the spread: the item and the amount on top, the tree in the middle (clipped to the page,
+     * so it runs on across the spine, and dragged to see more), the total cost or the leftovers along the bottom.
+     */
+    private void drawTreePage(GuiGraphics g, TreeView v, int side, int px, int py, int mouseX, int mouseY) {
+        RecipeTree<TreeKey> tree = v.tree();
+        RecipeTree.Node<TreeKey> top = tree.top();
+        int pw = layout.pageWidth(), ph = layout.pageHeight(), x = px + MARGIN, y = py + MARGIN, width = pw - 2 * MARGIN;
+        if (top == null || flipFrom != null) return; // pages turning show blank paper
+        if (side == 0) {
+            if (!memory.history.isEmpty()) {
+                button(g, BACK, BACK_HOT, x, y + 3, 14, 10, mouseX, mouseY, this::back);
+                if (inside(mouseX, mouseY, x, y + 3, 14, 10)) hoveredText = Component.translatable("gui.thecatalog.back");
+            }
+            ItemStack stack = top.key().stack();
+            drawStack(g, stack, x + 16, y - 1, mouseX, mouseY);
+            g.drawString(font, trim(stack.getHoverName(), width - 36), x + 36, y + 4, INK, false);
+        } else {
+            // "- x3 +": how many times the top recipe is made
+            String amount = "×" + tree.amount();
+            int right = x + width, ax = right - 8 - font.width(amount);
+            textButton(g, "+", right - 6, y + 4, mouseX, mouseY, () -> tree.setAmount(tree.amount() + (hasShiftDown() ? 10 : 1)));
+            g.drawString(font, amount, ax, y + 4, INK, false);
+            textButton(g, "-", ax - 10, y + 4, mouseX, mouseY, () -> tree.setAmount(tree.amount() - (hasShiftDown() ? 10 : 1)));
+        }
+        // the tree, laid out over the whole spread and clipped to this page
+        int areaX = layout.x() + MARGIN, areaW = bookWidth() - 2 * MARGIN, areaY = py + MARGIN + TREE_TOP, areaH = ph - 2 * MARGIN - TREE_TOP - TOTALS;
+        if (panned != v) {
+            panned = v;
+            panX = panY = 0;
+        }
+        Map<RecipeTree.Node<TreeKey>, Integer> widths = new java.util.IdentityHashMap<>();
+        int originX = areaX + (areaW - subtreeWidth(top, widths)) / 2 + (int) panX, originY = areaY + 2 + (int) panY;
+        int clipLeft = Math.max(areaX, px), clipRight = Math.min(areaX + areaW, px + pw);
+        boolean mouseHere = inside(mouseX, mouseY, clipLeft, areaY, clipRight - clipLeft, areaH);
+        g.enableScissor(clipLeft, areaY, clipRight, areaY + areaH);
+        drawNode(g, top, originX, originY, widths, mouseHere ? mouseX : -1, mouseHere ? mouseY : -1);
+        g.disableScissor();
+        // total cost on the left page, leftovers on the right
+        int bandY = py + ph - MARGIN - TOTALS + 4;
+        g.fill(x, bandY - 3, x + width, bandY - 2, BRACE);
+        g.drawString(font, Component.translatable(side == 0 ? "gui.thecatalog.total_cost" : "gui.thecatalog.leftovers"), x, bandY, INK, false);
+        List<RecipeTree.Amount<TreeKey>> items = side == 0 ? tree.totalCost() : tree.leftovers();
+        int perRow = width / SLOT;
+        // shortcut: only two rows fit under the tree; more distinct items than that are not shown
+        for (int i = 0; i < Math.min(items.size(), perRow * 2); i++) {
+            drawCounted(g, items.get(i).key().stack(), items.get(i).count(), x + i % perRow * SLOT, bandY + 10 + i / perRow * SLOT, mouseX, mouseY);
+        }
+    }
+
+    /** A node centered on its subtree, then lines down to its children. */
+    private void drawNode(GuiGraphics g, RecipeTree.Node<TreeKey> node, int left, int top, Map<RecipeTree.Node<TreeKey>, Integer> widths,
+                          int mouseX, int mouseY) {
+        int width = subtreeWidth(node, widths), cx = left + width / 2, w = nodeWidth(node), x = cx - w / 2;
+        RecipeTree.Step<TreeKey> step = node.step();
+        ItemStack stack = node.key().stack();
+        int bottom;
+        if (step != null) {
+            g.blitSprite(RECIPE_PANEL, x, top, w, NODE_H);
+            ((RecipeEntry) step.station()).drawCategoryIcon(g, x + 3, top + 3);
+            drawCounted(g, stack, node.crafts() * step.count(), x + 20, top + 2, mouseX, mouseY);
+            bottom = top + NODE_H;
+        } else {
+            drawCounted(g, stack, node.need(), x + 1, top + 2, mouseX, mouseY);
+            bottom = top + 20;
+        }
+        if (inside(mouseX, mouseY, x, top, w, bottom - top)) {
+            treeHits.add(new TreeHit(x, top, w, bottom - top, node.key()));
+            hoveredHelp = Component.translatable("gui.thecatalog.tree_help");
+        }
+        List<RecipeTree.Node<TreeKey>> children = node.children();
+        if (children.isEmpty()) return;
+        int childTop = top + LEVEL, mid = childTop - 6, childrenWidth = -TREE_GAP;
+        for (RecipeTree.Node<TreeKey> child : children) childrenWidth += subtreeWidth(child, widths) + TREE_GAP;
+        g.fill(cx, bottom, cx + 1, mid, INK);
+        int childLeft = left + (width - childrenWidth) / 2, first = -1, last = -1;
+        for (RecipeTree.Node<TreeKey> child : children) {
+            int childWidth = subtreeWidth(child, widths), childCx = childLeft + childWidth / 2;
+            if (first < 0) first = childCx;
+            last = childCx;
+            g.fill(childCx, mid, childCx + 1, childTop, INK);
+            drawNode(g, child, childLeft, childTop, widths, mouseX, mouseY);
+            childLeft += childWidth + TREE_GAP;
+        }
+        g.fill(first, mid, last + 1, mid + 1, INK);
+    }
+
+    /** An item with a count written on it, whatever the stack's own count. */
+    private void drawCounted(GuiGraphics g, ItemStack stack, int count, int x, int y, int mouseX, int mouseY) {
+        if (inside(mouseX, mouseY, x, y, SLOT, SLOT)) {
+            g.fill(x, y, x + SLOT, y + SLOT, HOVER);
+            hovered = stack;
+        }
+        g.renderItem(stack, x + 1, y + 1);
+        g.renderItemDecorations(font, stack, x + 1, y + 1, String.valueOf(count));
+    }
+
+    private void textButton(GuiGraphics g, String text, int x, int y, int mouseX, int mouseY, Runnable action) {
+        boolean hover = inside(mouseX, mouseY, x - 2, y - 2, font.width(text) + 4, 12);
+        g.drawString(font, text, x, y, hover ? INK : FAINT_INK, false);
+        hotspots.add(new Hotspot(x - 2, y - 2, font.width(text) + 4, 12, action));
     }
 
     /** Like a click in the vanilla recipe book: the server moves the ingredients into the grid, one craft or (Shift) all. */
@@ -835,6 +1023,14 @@ public class CatalogScreen extends Screen {
         search.setFocused(false);
         setFocused(null);
         if (flipFrom != null) return true;
+        if (view instanceof TreeView t) {
+            for (TreeHit hit : treeHits) {
+                if (!inside(mouseX, mouseY, hit.x(), hit.y(), hit.w(), hit.h())) continue;
+                if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) t.tree().cycle(hit.key());
+                else if (button == GLFW.GLFW_MOUSE_BUTTON_RIGHT) t.tree().toggleBase(hit.key());
+                return true;
+            }
+        }
         // hovered and hotspots come from the last frame drawn, which is what the player is looking at
         if (!hovered.isEmpty() && button <= GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
             open(hovered, button == GLFW.GLFW_MOUSE_BUTTON_RIGHT);
@@ -856,8 +1052,22 @@ public class CatalogScreen extends Screen {
     }
 
     @Override
+    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
+        if (view instanceof TreeView && button == GLFW.GLFW_MOUSE_BUTTON_LEFT && !search.isFocused()) {
+            panX += dragX;
+            panY += dragY;
+            return true;
+        }
+        return super.mouseDragged(mouseX, mouseY, button, dragX, dragY);
+    }
+
+    @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (scrollY == 0) return false;
+        if (view instanceof TreeView t && mouseX >= layout.x() && mouseX < layout.x() + bookWidth()) {
+            t.tree().setAmount(t.tree().amount() + (int) Math.signum(scrollY));
+            return true;
+        }
         boolean overTabs = compact || tabsLeft() ? mouseX < layout.x() : mouseX >= layout.x() + bookWidth();
         if (overTabs) memory.tabScroll -= (int) Math.signum(scrollY); // over the bookmarks
         else if (flipFrom == null) turnPage(scrollY < 0 ? 1 : -1);
