@@ -72,6 +72,7 @@ public class CatalogScreen extends Screen {
     private BookLayout layout;
     private EditBox search;
     private ItemStack hovered = ItemStack.EMPTY;
+    private @Nullable ExternalRecipes.Entry hoveredExternal; // a JEI recipe under the mouse draws its own tooltips
     private @Nullable Component hoveredText;
 
     /** @param parent screen to return to on close; @param start page to open on, or null for where the book was left */
@@ -215,21 +216,29 @@ public class CatalogScreen extends Screen {
     }
 
     /** The view's recipes split into pages; left pages leave room for the header. */
-    private List<List<DisplayRecipe>> recipePages(RecipeView v) {
+    /** Recipes from JEI when it is installed (every mod's JEI plugin), otherwise The Catalog's own index. */
+    private List<? extends RecipeEntry> lookup(RecipeView v) {
+        ExternalRecipes.Source external = ExternalRecipes.active();
+        if (external != null) return external.lookup(v.stack(), v.uses());
+        return v.uses() ? index.usesFor(v.stack()) : index.recipesFor(v.stack());
+    }
+
+    private List<List<RecipeEntry>> recipePages(RecipeView v) {
         return cached(List.of(v.stack().getItem(), v.stack().getComponentsPatch(), v.uses()), () -> {
-            List<List<DisplayRecipe>> pages = new ArrayList<>();
-            List<DisplayRecipe> page = new ArrayList<>();
-            int used = 0;
-            for (DisplayRecipe recipe : v.uses() ? index.usesFor(v.stack()) : index.recipesFor(v.stack())) {
+            List<List<RecipeEntry>> pages = new ArrayList<>();
+            List<RecipeEntry> page = new ArrayList<>();
+            int used = 0, width = layout.pageWidth() - 2 * MARGIN;
+            for (RecipeEntry recipe : lookup(v)) {
                 int room = layout.pageHeight() - MARGIN - FOOTER - (pages.size() % 2 == 0 ? RECIPE_HEADER : 0);
+                int height = recipe.pageHeight(width);
                 // shortcut: a recipe taller than a whole page (huge modded grids) overflows it instead of being scaled down.
-                if (!page.isEmpty() && used + recipe.height > room) {
+                if (!page.isEmpty() && used + height > room) {
                     pages.add(page);
                     page = new ArrayList<>();
                     used = 0;
                 }
                 page.add(recipe);
-                used += recipe.height + RECIPE_GAP;
+                used += height + RECIPE_GAP;
             }
             if (!page.isEmpty()) pages.add(page);
             return pages;
@@ -253,10 +262,13 @@ public class CatalogScreen extends Screen {
             updateSearch();
         }
         hovered = ItemStack.EMPTY;
+        hoveredExternal = null;
         hoveredText = null;
         hotspots.clear();
         super.render(g, mouseX, mouseY, partialTick); // the book (renderBackground), then the search box
-        if (!hovered.isEmpty()) {
+        if (hoveredExternal != null && hoveredExternal.drawTooltip(g, mouseX, mouseY)) {
+            // JEI drew its own tooltip (fluids, chances, tag lists...)
+        } else if (!hovered.isEmpty()) {
             List<Component> lines = new ArrayList<>(getTooltipFromItem(minecraft, hovered));
             if (ClientConfig.SHOW_MOD_NAME.get()) lines.add(Component.literal(CatalogIndex.modName(CatalogIndex.modId(hovered))).withStyle(ChatFormatting.BLUE, ChatFormatting.ITALIC));
             g.renderTooltip(font, lines, hovered.getTooltipImage(), hovered, mouseX, mouseY);
@@ -374,7 +386,7 @@ public class CatalogScreen extends Screen {
     }
 
     private void drawRecipePage(GuiGraphics g, RecipeView v, int side, int px, int py, int mouseX, int mouseY) {
-        List<List<DisplayRecipe>> pages = recipePages(v);
+        List<List<RecipeEntry>> pages = recipePages(v);
         int page = v.spread() * 2 + side, width = layout.pageWidth() - 2 * MARGIN;
         int x = px + MARGIN, y = py + MARGIN;
         if (side == 0) {
@@ -394,9 +406,10 @@ public class CatalogScreen extends Screen {
             }
         }
         if (page >= pages.size()) return;
-        for (DisplayRecipe recipe : pages.get(page)) {
-            drawRecipe(g, recipe, x, y, width, mouseX, mouseY);
-            y += recipe.height + RECIPE_GAP;
+        for (RecipeEntry entry : pages.get(page)) {
+            if (entry instanceof DisplayRecipe recipe) drawRecipe(g, recipe, x, y, width, mouseX, mouseY);
+            else if (entry instanceof ExternalRecipes.Entry external) drawExternal(g, external, x, y, width, mouseX, mouseY);
+            y += entry.pageHeight(width) + RECIPE_GAP;
         }
     }
 
@@ -428,6 +441,18 @@ public class CatalogScreen extends Screen {
         drawStack(g, recipe.shownOutput(), outX, outY, mouseX, mouseY);
         for (DisplayRecipe.Picture p : recipe.pictures) g.blitSprite(p.sprite(), x + p.x(), y + p.y(), p.width(), p.height());
         if (recipe.note != null) g.drawString(font, recipe.note, x + recipe.noteX, y + recipe.noteY, FAINT_INK, false);
+    }
+
+    /** A recipe from JEI: its category's title, then the recipe drawn by the category itself, shrunk if too wide. */
+    private void drawExternal(GuiGraphics g, ExternalRecipes.Entry entry, int x, int y, int width, int mouseX, int mouseY) {
+        g.drawString(font, trim(entry.title(), width), x, y, FAINT_INK, false);
+        float scale = entry.scale(width);
+        int top = y + DisplayRecipe.CAPTION;
+        entry.draw(g, x, top, scale, mouseX, mouseY);
+        if (inside(mouseX, mouseY, x, top, (int) (entry.width() * scale), (int) (entry.height() * scale))) {
+            hoveredExternal = entry;
+            hovered = entry.itemAt(mouseX, mouseY);
+        }
     }
 
     /** A "}" as tall as the input panel, pointing at the chevron. */
@@ -532,6 +557,17 @@ public class CatalogScreen extends Screen {
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
+    public void tick() {
+        // JEI layouts cycle their ingredients on tick; only the two visible pages are ticked
+        if (view instanceof RecipeView v && ready()) {
+            List<List<RecipeEntry>> pages = recipePages(v);
+            for (int page = v.spread() * 2; page < Math.min(pages.size(), v.spread() * 2 + 2); page++) {
+                for (RecipeEntry entry : pages.get(page)) if (entry instanceof ExternalRecipes.Entry external) external.tick();
+            }
+        }
     }
 
     @Override

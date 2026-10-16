@@ -24,7 +24,7 @@ import net.minecraft.world.item.crafting.SmithingTrimRecipe;
 import org.jetbrains.annotations.Nullable;
 
 /** A recipe laid out for a book page: item slots and pictures at fixed spots inside a width x height box. */
-public final class DisplayRecipe {
+public final class DisplayRecipe implements RecipeEntry {
     public static final int CAPTION = 11;
     private static final int S = BookLayout.SLOT;
     /** Padding between the input panel's edge and its slots. */
@@ -55,6 +55,11 @@ public final class DisplayRecipe {
     private DisplayRecipe(Component caption, List<ItemStack> results) {
         this.caption = caption;
         this.results = results;
+    }
+
+    @Override
+    public int pageHeight(int width) {
+        return height;
     }
 
     public ItemStack shownOutput() {
