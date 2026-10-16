@@ -47,7 +47,9 @@ authors="aydep"
 
 # The description text for the mod (multi line!) (#mandatory)
 description='''
-A vanilla-style recipe book: browse every item and see how to craft it.
+A vanilla-style recipe book that holds every item and recipe in the game. Browse all items by creative tab or by mod, search with @mod, and click an item to turn the page to its recipes; right-click for its uses. Crafting, smelting, stonecutting, smithing, brewing and modded recipe types work out of the box.
+
+Optional: with JEI installed, The Catalog also shows every recipe category from every mod's JEI plugin (machines, fluids, info pages and more) inside the book.
 '''
 
 # The [[mixins]] block allows you to declare your mixin config to FML so that it gets loaded.
