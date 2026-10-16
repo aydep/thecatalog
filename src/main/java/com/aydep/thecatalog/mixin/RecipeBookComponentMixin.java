@@ -1,5 +1,6 @@
 package com.aydep.thecatalog.mixin;
 
+import com.aydep.thecatalog.client.CatalogClient;
 import com.aydep.thecatalog.client.CatalogScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -15,7 +16,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * The recipe book button stays, but opens The Catalog's one-page panel in the recipe book's place. The container
- * screens still move aside for it exactly as for the recipe book; only its drawing and input are replaced.
+ * screens still move aside for it exactly as for the recipe book; only its drawing and input are replaced. Without the
+ * book in the inventory (if the config asks for it) the button is hidden and the book stays shut.
  */
 @Mixin(RecipeBookComponent.class)
 public abstract class RecipeBookComponentMixin implements CatalogScreen.PanelHost {
@@ -27,10 +29,23 @@ public abstract class RecipeBookComponentMixin implements CatalogScreen.PanelHos
     @Shadow public abstract boolean isVisible();
 
     @Unique private @Nullable CatalogScreen thecatalog$panel;
+    // shortcut: checked when the screen opens; picking the book up or dropping it with the screen open counts from the next opening
+    @Unique private boolean thecatalog$allowed = true;
 
     @Override
     public @Nullable CatalogScreen thecatalog$panel() {
         return isVisible() ? thecatalog$panel : null;
+    }
+
+    @Inject(method = "init", at = @At("HEAD"))
+    private void thecatalog$init(CallbackInfo ci) {
+        thecatalog$allowed = CatalogClient.hasBook();
+    }
+
+    /** Shut without the book; the player's open/closed setting is kept for when they carry it again. */
+    @Inject(method = "isVisible", at = @At("HEAD"), cancellable = true)
+    private void thecatalog$isVisible(CallbackInfoReturnable<Boolean> cir) {
+        if (!thecatalog$allowed) cir.setReturnValue(false);
     }
 
     /** Runs whenever the book is opened or its screen resized. */
@@ -60,8 +75,10 @@ public abstract class RecipeBookComponentMixin implements CatalogScreen.PanelHos
         if (thecatalog$panel() != null) ci.cancel();
     }
 
-    @Inject(method = "tick", at = @At("TAIL"))
+    /** Without the book the vanilla tick would keep reopening it to match the player's setting, so it is skipped. */
+    @Inject(method = "tick", at = @At("HEAD"), cancellable = true)
     private void thecatalog$tick(CallbackInfo ci) {
+        if (!thecatalog$allowed) ci.cancel();
         CatalogScreen panel = thecatalog$panel();
         if (panel != null) panel.tick();
     }

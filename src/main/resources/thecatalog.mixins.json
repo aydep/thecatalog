@@ -4,6 +4,7 @@
   "package": "com.aydep.thecatalog.mixin",
   "compatibilityLevel": "JAVA_21",
   "client": [
+    "ImageButtonAccessor",
     "RecipeBookComponentMixin"
   ],
   "injectors": {

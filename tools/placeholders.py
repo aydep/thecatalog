@@ -264,6 +264,31 @@ sprite("flame", 14, 14, flame)
 sprite("search_tab", 32, 24, search_tab, nine_slice=8)
 sprite("search_icon", 9, 9, magnifier)
 save(os.path.join(OUT, "item", "catalog.png"), 16, 16, tome)
+
+
+def craft(color):  # 11x11 "+" on a small paper button
+    box = rounded(11, 11, PANEL_FILL)
+    return lambda x, y: color if (x == 5 and 3 <= y <= 7) or (y == 5 and 3 <= x <= 7) else box(x, y)
+
+
+def tree_icon(color):  # 11x11: a root box with lines down to two children
+    def px(x, y):
+        boxes = ((4, 0), (0, 8), (8, 8))
+        if any(bx <= x <= bx + 2 and by <= y <= by + 2 for bx, by in boxes): return color
+        if (x == 5 and 3 <= y <= 5) or (y == 5 and 1 <= x <= 9) or (x in (1, 9) and 6 <= y <= 7): return color
+        return CLEAR
+    return px
+
+
+sprite("craft", 11, 11, craft(INK))
+sprite("craft_highlighted", 11, 11, craft(INK_HOT))
+sprite("tree", 11, 11, tree_icon(INK))
+sprite("tree_highlighted", 11, 11, tree_icon(INK_HOT))
+# the vanilla recipe book button (20x18, overridden in the minecraft namespace) shows the Catalog instead
+button = lambda x, y: tome(x - 2, y - 1) if 2 <= x < 18 and 1 <= y < 17 else CLEAR
+VANILLA = os.path.join(OUT, "..", "..", "minecraft", "textures", "gui", "sprites", "recipe_book")
+save(os.path.join(VANILLA, "button.png"), 20, 18, button)
+save(os.path.join(VANILLA, "button_highlighted.png"), 20, 18, lambda x, y: (255, 255, 255, 255) if button(x, y) == OUTLINE else button(x, y))
 # mod logo for the Mods list: the item icon at 8x (OUT is .../assets/thecatalog/textures, the logo goes in resources/)
 save(os.path.join(OUT, "..", "..", "..", "logo.png"), 128, 128, lambda x, y: tome(x // 8, y // 8))
 print("ok")

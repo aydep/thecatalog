@@ -1,10 +1,15 @@
 package com.aydep.thecatalog.client;
 
 import com.aydep.thecatalog.TheCatalog;
+import com.aydep.thecatalog.mixin.ImageButtonAccessor;
 import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.gui.components.ImageButton;
+import net.minecraft.client.gui.components.events.GuiEventListener;
+import net.minecraft.client.gui.screens.recipebook.RecipeBookComponent;
+import net.minecraft.client.gui.screens.recipebook.RecipeUpdateListener;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.minecraft.world.entity.player.Player;
@@ -48,7 +53,7 @@ public final class CatalogClient {
     }
 
     /** The book only opens by key while the player carries it, unless the config says otherwise. */
-    static boolean hasBook() {
+    public static boolean hasBook() {
         Player player = Minecraft.getInstance().player;
         return player != null && (!ClientConfig.REQUIRE_BOOK.get() || player.getInventory().contains(stack -> stack.is(TheCatalog.CATALOG.get())));
     }
@@ -80,6 +85,17 @@ public final class CatalogClient {
         else if (hasBook()) Minecraft.getInstance().setScreen(new CatalogScreen(screen, new CatalogScreen.RecipeView(stack, uses, 0, 0)));
         else return;
         event.setCanceled(true);
+    }
+
+    /** The recipe book button (which opens the side panel) shows only while the player carries the book. */
+    @SubscribeEvent
+    static void onScreenInit(ScreenEvent.Init.Post event) {
+        if (!(event.getScreen() instanceof RecipeUpdateListener) || hasBook()) return;
+        for (GuiEventListener child : event.getListenersList()) {
+            if (child instanceof ImageButton button && ((ImageButtonAccessor) button).thecatalog$sprites() == RecipeBookComponent.RECIPE_BUTTON_SPRITES) {
+                button.visible = button.active = false;
+            }
+        }
     }
 
     @SubscribeEvent
