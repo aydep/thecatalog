@@ -39,7 +39,6 @@ public class CatalogScreen extends Screen {
             BACK = sprite("back"), BACK_HOT = sprite("back_highlighted");
     private static final int INK = 0xFF3B2A1A, FAINT_INK = 0xFF8A7458, HOVER = 0x303B2A1A;
     private static final int TAB_HEIGHT = 22, RECIPE_HEADER = 34, RECIPE_GAP = 6;
-    private static final long FLIP_MS = 300;
 
     sealed interface View permits IndexView, RecipeView {
         int spread();
@@ -88,7 +87,7 @@ public class CatalogScreen extends Screen {
 
     @Override
     protected void init() {
-        layout = BookLayout.fit(width, height);
+        layout = BookLayout.fit(width, height, ClientConfig.MAX_PAGE_WIDTH.get(), ClientConfig.MAX_PAGE_HEIGHT.get(), tabsLeft());
         cache.clear();
         int x = layout.x() + 34, y = layout.y() + layout.pageHeight() - 21;
         search = new EditBox(font, x, y, layout.pageWidth() - 34 - MARGIN, 10, Component.translatable("gui.thecatalog.search"));
@@ -114,10 +113,14 @@ public class CatalogScreen extends Screen {
     }
 
     private void flipTo(View next, boolean forward) {
-        flipFrom = view;
-        flipForward = forward;
-        flipStart = Util.getMillis();
-        minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.BOOK_PAGE_TURN, 1.0F));
+        if (ClientConfig.PAGE_TURN_ANIMATION.get()) {
+            flipFrom = view;
+            flipForward = forward;
+            flipStart = Util.getMillis();
+        }
+        if (ClientConfig.PAGE_TURN_SOUND.get()) {
+            minecraft.getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.BOOK_PAGE_TURN, 1.0F));
+        }
         setView(next);
     }
 
@@ -171,8 +174,10 @@ public class CatalogScreen extends Screen {
     private List<ItemStack> items(IndexView v) {
         return cached(List.of(v.tab(), v.query()), () -> {
             List<ItemStack> items = tab(v).items();
-            if (v.query().isBlank()) return items;
+            boolean hideUncraftable = ClientConfig.HIDE_ITEMS_WITHOUT_RECIPES.get();
+            if (v.query().isBlank() && !hideUncraftable) return items;
             return items.stream().filter(s -> {
+                if (hideUncraftable && index.recipesFor(s).isEmpty()) return false;
                 String mod = CatalogIndex.modId(s);
                 return CatalogSearch.matches(v.query(), s.getHoverName().getString(), mod, CatalogIndex.modName(mod));
             }).toList();
@@ -213,7 +218,7 @@ public class CatalogScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        if (flipFrom != null && Util.getMillis() - flipStart >= FLIP_MS) {
+        if (flipFrom != null && Util.getMillis() - flipStart >= ClientConfig.PAGE_TURN_MILLIS.get()) {
             flipFrom = null;
             updateSearch();
         }
@@ -223,7 +228,7 @@ public class CatalogScreen extends Screen {
         super.render(g, mouseX, mouseY, partialTick); // the book (renderBackground), then the search box
         if (!hovered.isEmpty()) {
             List<Component> lines = new ArrayList<>(getTooltipFromItem(minecraft, hovered));
-            lines.add(Component.literal(CatalogIndex.modName(CatalogIndex.modId(hovered))).withStyle(ChatFormatting.BLUE, ChatFormatting.ITALIC));
+            if (ClientConfig.SHOW_MOD_NAME.get()) lines.add(Component.literal(CatalogIndex.modName(CatalogIndex.modId(hovered))).withStyle(ChatFormatting.BLUE, ChatFormatting.ITALIC));
             g.renderTooltip(font, lines, hovered.getTooltipImage(), hovered, mouseX, mouseY);
         } else if (hoveredText != null) {
             g.renderTooltip(font, hoveredText, mouseX, mouseY);
@@ -245,7 +250,7 @@ public class CatalogScreen extends Screen {
         }
         // A sheet turns around the spine. Under it, the side it leaves already shows the new page,
         // the side it lands on still shows the old one. Its front is the old page, its back the new one.
-        float t = Math.min(1, (Util.getMillis() - flipStart) / (float) FLIP_MS);
+        float t = Math.min(1, (Util.getMillis() - flipStart) / ClientConfig.PAGE_TURN_MILLIS.get().floatValue());
         int from = flipForward ? 1 : 0, to = 1 - from;
         drawPage(g, view, from, -1, -1);
         drawPage(g, flipFrom, to, -1, -1);
@@ -263,23 +268,30 @@ public class CatalogScreen extends Screen {
         g.pose().popPose();
     }
 
-    /** Bookmarks down the left edge; arrows scroll to the previous / next group when they don't all fit. */
+    private static boolean tabsLeft() {
+        return ClientConfig.TAB_SIDE.get() == ClientConfig.TabSide.LEFT;
+    }
+
+    /** Bookmarks down one edge (4px tucked under the page); arrows scroll to the previous / next group when they don't all fit. */
     private void drawTabs(GuiGraphics g, int mouseX, int mouseY) {
         List<CatalogIndex.Tab> tabs = index.tabs;
-        int pw = layout.pageWidth(), tx = layout.x() - BookLayout.TAB_WIDTH + 4, top = layout.y() + 12;
+        boolean left = tabsLeft();
+        int pw = layout.pageWidth(), top = layout.y() + 12;
+        int tx = left ? layout.x() - BookLayout.TAB_WIDTH + 4 : layout.x() + 2 * pw - 4;
+        int outward = left ? -3 : 3, visibleX = left ? tx : tx + 4; // the part of the tab not under the page
         int visible = (layout.pageHeight() - 24) / TAB_HEIGHT;
         tabScroll = Math.clamp(tabScroll, 0, Math.max(0, tabs.size() - visible));
         if (tabScroll > 0) {
-            button(g, TAB_UP, TAB_UP, tx + 5, layout.y() + 3, 12, 7, mouseX, mouseY, () -> tabScroll -= visible);
+            button(g, TAB_UP, TAB_UP, visibleX + 5, layout.y() + 3, 12, 7, mouseX, mouseY, () -> tabScroll -= visible);
         }
         if (tabScroll + visible < tabs.size()) {
-            button(g, TAB_DOWN, TAB_DOWN, tx + 5, top + visible * TAB_HEIGHT + 2, 12, 7, mouseX, mouseY, () -> tabScroll += visible);
+            button(g, TAB_DOWN, TAB_DOWN, visibleX + 5, top + visible * TAB_HEIGHT + 2, 12, 7, mouseX, mouseY, () -> tabScroll += visible);
         }
         int current = view instanceof IndexView v ? v.tab() : -1;
         for (int i = tabScroll; i < Math.min(tabs.size(), tabScroll + visible); i++) {
-            int x = tx - (i == current ? 3 : 0), y = top + (i - tabScroll) * TAB_HEIGHT;
+            int x = tx + (i == current ? outward : 0), y = top + (i - tabScroll) * TAB_HEIGHT;
             g.blitSprite(i == current ? TAB_SELECTED : TAB, x, y, 26, TAB_HEIGHT);
-            g.renderItem(tabs.get(i).icon(), x + 3, y + 3);
+            g.renderItem(tabs.get(i).icon(), x + (visibleX - tx) + 3, y + 3);
             if (inside(mouseX, mouseY, x, y, 26, TAB_HEIGHT)) hoveredText = tabs.get(i).name();
             int tab = i;
             hotspots.add(new Hotspot(x, y, 26, TAB_HEIGHT, () -> selectTab(tab)));
@@ -425,7 +437,8 @@ public class CatalogScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (scrollY == 0) return false;
-        if (mouseX < layout.x()) tabScroll -= (int) Math.signum(scrollY); // over the bookmarks
+        boolean overTabs = tabsLeft() ? mouseX < layout.x() : mouseX >= layout.x() + 2 * layout.pageWidth();
+        if (overTabs) tabScroll -= (int) Math.signum(scrollY); // over the bookmarks
         else if (flipFrom == null) turnPage(scrollY < 0 ? 1 : -1);
         return true;
     }
@@ -462,7 +475,7 @@ public class CatalogScreen extends Screen {
 
     @Override
     public boolean isPauseScreen() {
-        return false; // the world keeps running while you read, like an inventory screen
+        return ClientConfig.PAUSE_GAME.get();
     }
 
     @Override

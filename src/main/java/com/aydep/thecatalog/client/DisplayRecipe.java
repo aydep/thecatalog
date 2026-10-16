@@ -32,7 +32,7 @@ public final class DisplayRecipe {
     /** A slot that cycles through its stacks once a second, e.g. "any planks". */
     public record Slot(int x, int y, List<ItemStack> stacks) {
         public ItemStack shown() {
-            return stacks.isEmpty() ? ItemStack.EMPTY : stacks.get((int) (Util.getMillis() / 1000 % stacks.size()));
+            return stacks.isEmpty() ? ItemStack.EMPTY : stacks.get((int) (Util.getMillis() / ClientConfig.INGREDIENT_CYCLE_MILLIS.get() % stacks.size()));
         }
     }
 
