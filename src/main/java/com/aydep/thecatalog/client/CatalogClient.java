@@ -26,6 +26,7 @@ import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.client.settings.KeyConflictContext;
 import net.neoforged.neoforge.event.TagsUpdatedEvent;
+import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 @EventBusSubscriber(modid = TheCatalog.MODID, value = Dist.CLIENT)
@@ -87,15 +88,23 @@ public final class CatalogClient {
         event.setCanceled(true);
     }
 
+    private static boolean isRecipeButton(@Nullable GuiEventListener child) {
+        return child instanceof ImageButton button && ((ImageButtonAccessor) button).thecatalog$sprites() == RecipeBookComponent.RECIPE_BUTTON_SPRITES;
+    }
+
     /** The recipe book button (which opens the side panel) shows only while the player carries the book. */
     @SubscribeEvent
     static void onScreenInit(ScreenEvent.Init.Post event) {
         if (!(event.getScreen() instanceof RecipeUpdateListener) || hasBook()) return;
         for (GuiEventListener child : event.getListenersList()) {
-            if (child instanceof ImageButton button && ((ImageButtonAccessor) button).thecatalog$sprites() == RecipeBookComponent.RECIPE_BUTTON_SPRITES) {
-                button.visible = button.active = false;
-            }
+            if (isRecipeButton(child)) ((ImageButton) child).visible = ((ImageButton) child).active = false;
         }
+    }
+
+    /** A clicked button keeps focus, which draws it highlighted; the recipe book button lets go so it looks normal again. */
+    @SubscribeEvent
+    static void onScreenClick(ScreenEvent.MouseButtonPressed.Post event) {
+        if (event.getScreen() instanceof RecipeUpdateListener && isRecipeButton(event.getScreen().getFocused())) event.getScreen().setFocused(null);
     }
 
     @SubscribeEvent
