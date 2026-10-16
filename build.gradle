@@ -30,7 +30,7 @@ repositories {
     maven {
         name = "Jared's maven (JEI)"
         url = "https://maven.blamejared.com/"
-        content { includeGroup "mezz.jei" }
+        content { includeGroupByRegex 'mezz\\.jei|net\\.mezzdev.*' } // JEI and its config library
     }
 }
 
