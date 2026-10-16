@@ -41,6 +41,7 @@ public final class Generation implements RecipeEntry {
 
     final ItemStack stack;
     final Data data;
+    int chart = CHART; // shorter on the side panel's small pages
     private final List<Spread> spreads;
 
     private Generation(ItemStack stack, Data data) {
@@ -187,9 +188,14 @@ public final class Generation implements RecipeEntry {
         return out.toString();
     }
 
+    /** Shrinks the chart so the whole entry fits a page with {@code room} pixels for recipes. */
+    void fit(int room) {
+        chart = Math.clamp(room - (HEADER + GAP + 4 + LINES * 10), 30, CHART);
+    }
+
     @Override
     public int pageHeight(int width) {
-        return HEADER + GAP + CHART + 4 + LINES * 10;
+        return HEADER + GAP + chart + 4 + LINES * 10;
     }
 
     @Override

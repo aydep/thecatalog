@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.aydep.thecatalog.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "RecipeBookComponentMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

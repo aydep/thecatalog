@@ -1,17 +1,23 @@
 package com.aydep.thecatalog.compat.jei;
 
 import com.aydep.thecatalog.TheCatalog;
+import com.aydep.thecatalog.client.CatalogScreen;
 import com.aydep.thecatalog.client.ExternalRecipes;
 import com.mojang.logging.LogUtils;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
+import mezz.jei.api.gui.handlers.IGlobalGuiHandler;
+import mezz.jei.api.registration.IGuiHandlerRegistration;
 import mezz.jei.api.runtime.IJeiRuntime;
 import mezz.jei.common.Internal;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.common.NeoForge;
+import java.util.Collection;
+import java.util.List;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -32,6 +38,18 @@ public class CatalogJeiPlugin implements IModPlugin {
     @Override
     public ResourceLocation getPluginUid() {
         return ResourceLocation.fromNamespaceAndPath(TheCatalog.MODID, "catalog");
+    }
+
+    /** JEI keeps its own panels clear of The Catalog's side panel (its bookmarks and search tab reach past the recipe book's area). */
+    @Override
+    public void registerGuiHandlers(IGuiHandlerRegistration registration) {
+        registration.addGlobalGuiHandler(new IGlobalGuiHandler() {
+            @Override
+            public Collection<Rect2i> getGuiExtraAreas() {
+                CatalogScreen panel = Minecraft.getInstance().screen == null ? null : CatalogScreen.panelOf(Minecraft.getInstance().screen);
+                return panel == null ? List.of() : List.of(panel.area());
+            }
+        });
     }
 
     @Override

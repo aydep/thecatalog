@@ -21,6 +21,8 @@ Creative mode; in Survival and Adventure the book replaces it.
 - Search with `@mod` to filter by mod. Right-click the search box to clear it.
 - Recipe pages with a page-turn animation and sound, Recipes / Uses toggle, and Back history.
 - Lookup from any inventory: hover an item and press `R` (recipes) or `U` (uses).
+- The recipe book button beside inventories, crafting tables and furnaces opens a one-page Catalog in place of the
+  vanilla recipe book (item grid, search and recipes; `R` / `U` show items there while it is open).
 - Recipe index built in the background, so opening the book never freezes the game, even in large modpacks.
 - English and Russian.
 

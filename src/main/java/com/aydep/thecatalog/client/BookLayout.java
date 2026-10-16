@@ -18,6 +18,12 @@ public record BookLayout(int x, int y, int pageWidth, int pageHeight, int cols, 
         return new BookLayout((screenWidth - 2 * pw - TAB_WIDTH) / 2 + (tabsLeft ? TAB_WIDTH : 0), (screenHeight - ph - SEARCH_HEIGHT - TOP_TABS) / 2 + TOP_TABS, pw, ph, cols, rows);
     }
 
+    /** One page where the vanilla recipe book (147 x 166 at x, y) would be, 2px further left so its cover clears the inventory. */
+    public static BookLayout panel(int x, int y) {
+        int ph = 166;
+        return new BookLayout(x - 2, y, MIN_PAGE_WIDTH, ph, (MIN_PAGE_WIDTH - 2 * MARGIN) / SLOT, (ph - MARGIN - HEADER - FOOTER) / SLOT);
+    }
+
     public int perPage() {
         return cols * rows;
     }

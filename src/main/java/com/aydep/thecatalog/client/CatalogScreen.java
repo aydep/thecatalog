@@ -20,7 +20,10 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.Util;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.EditBox;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.recipebook.RecipeUpdateListener;
+import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.client.resources.language.I18n;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -38,7 +41,11 @@ import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
-/** The open book: an item grid with bookmark tabs, and recipe pages. Every page change turns a page. */
+/**
+ * The open book: an item grid with bookmark tabs, and recipe pages. Every page change turns a page. The same screen,
+ * {@link #panel compact}, is the one-page panel shown beside inventories in place of the vanilla recipe book: no
+ * description page, and the item's header on every recipe page.
+ */
 public class CatalogScreen extends Screen {
     private static final ResourceLocation CRAFTING = ResourceLocation.withDefaultNamespace("crafting");
     private static final ResourceLocation PAGE_LEFT = sprite("page_left"), PAGE_RIGHT = sprite("page_right"), COVER = sprite("cover"),
@@ -70,13 +77,28 @@ public class CatalogScreen extends Screen {
 
     private record Hotspot(int x, int y, int w, int h, Runnable action) {}
 
-    // Remembered while the game runs, so the book reopens where it was left, Back history included.
-    private static View lastView = new IndexView(0, "", 0);
-    private static final Deque<View> history = new ArrayDeque<>();
-    private static int tabScroll;
-    private static int lastTab; // the item grid's bookmark, for searches typed on a recipe page
+    /** Remembered while the game runs, so the book reopens where it was left, Back history included. */
+    private static final class Memory {
+        View lastView = new IndexView(0, "", 0);
+        final Deque<View> history = new ArrayDeque<>();
+        int tabScroll;
+        int lastTab; // the item grid's bookmark, for searches typed on a recipe page
+    }
+
+    // the side panel keeps its own place: its pages hold different amounts than the book's spreads
+    private static Memory bookMemory = new Memory(), panelMemory = new Memory();
+
+    /** Implemented by the vanilla recipe book (see RecipeBookComponentMixin), which shows a panel in its place. */
+    public interface PanelHost {
+        /** The open panel, or null while the recipe book is closed. */
+        @Nullable CatalogScreen thecatalog$panel();
+    }
 
     private final @Nullable Screen parent;
+    private final boolean compact;
+    private final int panelX, panelY;
+    private final Memory memory;
+    private double lastMouseX, lastMouseY;
     private @Nullable CatalogIndex index = CatalogIndex.current(); // null until the first background build is done
     private final Map<Object, Object> cache = new HashMap<>();
     private final List<Hotspot> hotspots = new ArrayList<>();
@@ -94,26 +116,52 @@ public class CatalogScreen extends Screen {
 
     /** @param parent screen to return to on close; @param start page to open on, or null for where the book was left */
     public CatalogScreen(@Nullable Screen parent, @Nullable RecipeView start) {
+        this(parent, start, false, 0, 0);
+    }
+
+    private CatalogScreen(@Nullable Screen parent, @Nullable RecipeView start, boolean compact, int panelX, int panelY) {
         super(Component.translatable("item.thecatalog.catalog"));
         this.parent = parent;
+        this.compact = compact;
+        this.panelX = panelX;
+        this.panelY = panelY;
+        this.memory = compact ? panelMemory : bookMemory;
         CatalogIndex.requestIfMissing();
         if (start != null) {
-            history.push(lastView);
-            lastView = start;
+            memory.history.push(memory.lastView);
+            memory.lastView = start;
         }
-        view = lastView;
+        view = memory.lastView;
+    }
+
+    /**
+     * The side panel, with its top-left corner where the vanilla recipe book's would be. Set up by hand rather than
+     * with {@code init(Minecraft, int, int)}, which would tell other mods (JEI) that this screen had opened.
+     */
+    public static CatalogScreen panel(Minecraft minecraft, int screenWidth, int screenHeight, int x, int y) {
+        CatalogScreen panel = new CatalogScreen(null, null, true, x, y);
+        panel.minecraft = minecraft;
+        panel.font = minecraft.font;
+        panel.width = screenWidth;
+        panel.height = screenHeight;
+        panel.init();
+        return panel;
+    }
+
+    /** The side panel open in a container screen, if any. */
+    public static @Nullable CatalogScreen panelOf(Screen screen) {
+        return screen instanceof RecipeUpdateListener l && l.getRecipeBookComponent() instanceof PanelHost host ? host.thecatalog$panel() : null;
     }
 
     static void forget() {
-        lastView = new IndexView(0, "", 0);
-        history.clear();
-        tabScroll = 0;
-        lastTab = 0;
+        bookMemory = new Memory();
+        panelMemory = new Memory();
     }
 
     @Override
     protected void init() {
-        layout = BookLayout.fit(width, height, ClientConfig.MAX_COLUMNS.get(), ClientConfig.MAX_ROWS.get(), tabsLeft());
+        layout = compact ? BookLayout.panel(panelX, panelY)
+                : BookLayout.fit(width, height, ClientConfig.MAX_COLUMNS.get(), ClientConfig.MAX_ROWS.get(), tabsLeft());
         cache.clear();
         // the search sits on a paper tab hanging under the left page, outside the turning pages
         int x = layout.x() + SEARCH_TAB_INSET + 16, y = layout.y() + layout.pageHeight() + 9;
@@ -128,8 +176,8 @@ public class CatalogScreen extends Screen {
             if (view instanceof IndexView v) {
                 if (!v.query().equals(query)) setView(new IndexView(v.tab(), query, 0));
             } else {
-                history.push(view); // typing on a recipe page goes to the item grid, Back returns
-                setView(new IndexView(lastTab, query, 0));
+                memory.history.push(view); // typing on a recipe page goes to the item grid, Back returns
+                setView(new IndexView(memory.lastTab, query, 0));
             }
         });
         addRenderableWidget(search);
@@ -152,8 +200,8 @@ public class CatalogScreen extends Screen {
 
     private void setView(View next) {
         view = next;
-        lastView = next;
-        if (next instanceof IndexView v) lastTab = v.tab();
+        memory.lastView = next;
+        if (next instanceof IndexView v) memory.lastTab = v.tab();
         updateSearch();
     }
 
@@ -174,14 +222,14 @@ public class CatalogScreen extends Screen {
         if (view instanceof IndexView v && !search.getValue().equals(v.query())) search.setValue(v.query());
     }
 
-    private void open(ItemStack stack, boolean uses) {
+    void open(ItemStack stack, boolean uses) {
         if (view instanceof RecipeView v && v.uses() == uses && ItemStack.isSameItemSameComponents(v.stack(), stack)) return;
-        history.push(view);
+        memory.history.push(view);
         flipTo(new RecipeView(stack.copyWithCount(1), uses, 0, 0), true);
     }
 
     private void back() {
-        if (!history.isEmpty()) flipTo(history.pop(), false);
+        if (!memory.history.isEmpty()) flipTo(memory.history.pop(), false);
     }
 
     private void turnPage(int direction) {
@@ -194,7 +242,7 @@ public class CatalogScreen extends Screen {
         String query = view instanceof IndexView v ? v.query() : "";
         int current = view instanceof IndexView v ? v.tab() : -1;
         if (tab == current) return;
-        if (view instanceof RecipeView) history.push(view);
+        if (view instanceof RecipeView) memory.history.push(view);
         flipTo(new IndexView(tab, query, 0), tab > current);
     }
 
@@ -279,15 +327,19 @@ public class CatalogScreen extends Screen {
         return allRecipes(v).stream().filter(e -> e.category().equals(category)).map(e -> (RecipeEntry) e).toList();
     }
 
-    /** Page 0 (the first left page) holds the item header and description; recipes start on page 1. */
+    /**
+     * In the book, page 0 (the first left page) holds the item header and description; recipes start on page 1.
+     * In the panel every page starts with the header.
+     */
     private List<List<RecipeEntry>> recipePages(RecipeView v) {
         return cached(List.of(v.stack().getItem(), v.stack().getComponentsPatch(), v.uses(), v.category()), () -> {
             List<List<RecipeEntry>> pages = new ArrayList<>();
-            pages.add(List.of());
+            if (!compact) pages.add(List.of());
             List<RecipeEntry> page = new ArrayList<>();
             int used = 0, width = layout.pageWidth() - 2 * MARGIN;
+            int room = layout.pageHeight() - MARGIN - FOOTER - (compact ? RECIPE_HEADER : 0);
             for (RecipeEntry recipe : recipesIn(v)) {
-                int room = layout.pageHeight() - MARGIN - FOOTER;
+                if (recipe instanceof Generation gen) gen.fit(room);
                 int height = recipe.pageHeight(width);
                 // shortcut: a recipe taller than a whole page (huge modded grids) overflows it instead of being scaled down.
                 if (!page.isEmpty() && used + height > room) {
@@ -308,7 +360,31 @@ public class CatalogScreen extends Screen {
             case IndexView i -> (items(i).size() + layout.perPage() - 1) / layout.perPage();
             case RecipeView r -> recipePages(r).size();
         };
-        return BookLayout.spreads(pages);
+        return compact ? Math.max(1, pages) : BookLayout.spreads(pages);
+    }
+
+    /** Which page a side of the view shows; the panel shows one page per spread. */
+    private int page(View v, int side) {
+        return compact ? v.spread() : v.spread() * 2 + side;
+    }
+
+    private int bookWidth() {
+        return (compact ? 1 : 2) * layout.pageWidth();
+    }
+
+    /** The panel's whole area: cover, bookmarks, category bookmarks above and the search tab below. */
+    public Rect2i area() {
+        int left = layout.x() - TAB_SPRITE + TAB_TUCK - TAB_SHIFT, top = layout.y() - BookLayout.TOP_TABS;
+        return new Rect2i(left, top, layout.x() + bookWidth() + COVER_BORDER_X - left, layout.y() + layout.pageHeight() + BookLayout.SEARCH_HEIGHT - top);
+    }
+
+    public boolean isOver(double mouseX, double mouseY) {
+        return area().contains((int) mouseX, (int) mouseY);
+    }
+
+    /** Typing in the search box, so key shortcuts must leave the keys alone. */
+    boolean typing() {
+        return search.isFocused();
     }
 
     // ---- drawing ----
@@ -319,6 +395,8 @@ public class CatalogScreen extends Screen {
             flipFrom = null;
             updateSearch();
         }
+        lastMouseX = mouseX;
+        lastMouseY = mouseY;
         hovered = ItemStack.EMPTY;
         hoveredExternal = null;
         hoveredText = null;
@@ -337,17 +415,17 @@ public class CatalogScreen extends Screen {
 
     @Override
     public void renderBackground(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
-        super.renderBackground(g, mouseX, mouseY, partialTick);
+        if (!compact) super.renderBackground(g, mouseX, mouseY, partialTick); // the panel lies on the container screen's own
         if (flipFrom != null) mouseX = mouseY = -1; // nothing is hoverable while a page turns
         int bx = layout.x(), by = layout.y(), pw = layout.pageWidth(), ph = layout.pageHeight();
         // search tab, cover, then bookmarks lying on it, then the pages on top of the bookmarks' inner ends
         g.blitSprite(SEARCH_TAB, bx + SEARCH_TAB_INSET, by + ph - 8, pw - 2 * SEARCH_TAB_INSET, 8 + BookLayout.SEARCH_HEIGHT);
-        g.blitSprite(COVER, bx - COVER_BORDER_X, by - COVER_BORDER_Y, 2 * pw + 2 * COVER_BORDER_X, ph + 2 * COVER_BORDER_Y);
+        g.blitSprite(COVER, bx - COVER_BORDER_X, by - COVER_BORDER_Y, bookWidth() + 2 * COVER_BORDER_X, ph + 2 * COVER_BORDER_Y);
         boolean ready = ready();
         if (ready) drawTabs(g, mouseX, mouseY);
         if (ready && view instanceof RecipeView v) drawCategoryTabs(g, v, mouseX, mouseY);
-        g.blitSprite(PAGE_LEFT, bx, by, pw, ph);
-        g.blitSprite(PAGE_RIGHT, bx + pw, by, pw, ph);
+        if (!compact) g.blitSprite(PAGE_LEFT, bx, by, pw, ph);
+        g.blitSprite(PAGE_RIGHT, bx + bookWidth() - pw, by, pw, ph); // the panel is a right-hand page, bound on the left
         g.blitSprite(SEARCH_ICON, search.getX() - 13, search.getY() - 1, 9, 9);
         if (!ready) {
             Component text = Component.translatable("gui.thecatalog.indexing");
@@ -356,12 +434,26 @@ public class CatalogScreen extends Screen {
         }
         if (flipFrom == null) {
             drawPage(g, view, 0, mouseX, mouseY);
-            drawPage(g, view, 1, mouseX, mouseY);
+            if (!compact) drawPage(g, view, 1, mouseX, mouseY);
+            return;
+        }
+        float t = Math.min(1, (Util.getMillis() - flipStart) / ClientConfig.PAGE_TURN_MILLIS.get().floatValue());
+        if (compact) {
+            // one page turning over its bound left edge: forward lifts the old page off the new, backward lays the new one down
+            drawPage(g, flipForward ? view : flipFrom, 0, -1, -1);
+            float squash = flipForward ? Mth.cos(t * Mth.HALF_PI) : Mth.sin(t * Mth.HALF_PI);
+            g.pose().pushPose();
+            g.pose().translate(bx, 0, 250);
+            g.pose().scale(squash, 1, 1);
+            g.pose().translate(-bx, 0, 0);
+            g.blitSprite(PAGE_RIGHT, bx, by, pw, ph);
+            drawPage(g, flipForward ? flipFrom : view, 0, -1, -1);
+            g.fill(bx, by, bx + pw, by + ph, (int) ((1 - squash) * 0x60) << 24);
+            g.pose().popPose();
             return;
         }
         // A sheet turns around the spine. Under it, the side it leaves already shows the new page,
         // the side it lands on still shows the old one. Its front is the old page, its back the new one.
-        float t = Math.min(1, (Util.getMillis() - flipStart) / ClientConfig.PAGE_TURN_MILLIS.get().floatValue());
         int from = flipForward ? 1 : 0, to = 1 - from;
         drawPage(g, view, from, -1, -1);
         drawPage(g, flipFrom, to, -1, -1);
@@ -386,22 +478,22 @@ public class CatalogScreen extends Screen {
     /** Bookmarks down one edge (4px tucked under the page); arrows scroll to the previous / next group when they don't all fit. */
     private void drawTabs(GuiGraphics g, int mouseX, int mouseY) {
         List<CatalogIndex.Tab> tabs = index.tabs;
-        boolean left = tabsLeft();
-        int pw = layout.pageWidth(), top = layout.y() + 12;
-        int bookLeft = layout.x(), bookRight = layout.x() + 2 * pw;
+        boolean left = compact || tabsLeft();
+        int top = layout.y() + 12;
+        int bookLeft = layout.x(), bookRight = layout.x() + bookWidth();
         int tx = left ? bookLeft - TAB_SPRITE + TAB_TUCK : bookRight - TAB_TUCK;
         int outward = left ? -TAB_SHIFT : TAB_SHIFT, visibleX = left ? tx : bookRight; // visibleX: where the shown part starts
         int visible = (layout.pageHeight() - 24) / TAB_HEIGHT;
-        tabScroll = Math.clamp(tabScroll, 0, Math.max(0, tabs.size() - visible));
-        if (tabScroll > 0) {
-            button(g, TAB_UP, TAB_UP, visibleX + 8, layout.y() + 3, 12, 7, mouseX, mouseY, () -> tabScroll -= visible);
+        memory.tabScroll = Math.clamp(memory.tabScroll, 0, Math.max(0, tabs.size() - visible));
+        if (memory.tabScroll > 0) {
+            button(g, TAB_UP, TAB_UP, visibleX + 8, layout.y() + 3, 12, 7, mouseX, mouseY, () -> memory.tabScroll -= visible);
         }
-        if (tabScroll + visible < tabs.size()) {
-            button(g, TAB_DOWN, TAB_DOWN, visibleX + 8, top + visible * TAB_HEIGHT + 2, 12, 7, mouseX, mouseY, () -> tabScroll += visible);
+        if (memory.tabScroll + visible < tabs.size()) {
+            button(g, TAB_DOWN, TAB_DOWN, visibleX + 8, top + visible * TAB_HEIGHT + 2, 12, 7, mouseX, mouseY, () -> memory.tabScroll += visible);
         }
         int current = view instanceof IndexView v ? v.tab() : -1;
-        for (int i = tabScroll; i < Math.min(tabs.size(), tabScroll + visible); i++) {
-            int x = tx + (i == current ? outward : 0), y = top + (i - tabScroll) * TAB_HEIGHT;
+        for (int i = memory.tabScroll; i < Math.min(tabs.size(), memory.tabScroll + visible); i++) {
+            int x = tx + (i == current ? outward : 0), y = top + (i - memory.tabScroll) * TAB_HEIGHT;
             ResourceLocation sprite = left ? (i == current ? TAB_SELECTED : TAB) : (i == current ? TAB_RIGHT_SELECTED : TAB_RIGHT);
             g.blitSprite(sprite, x, y, TAB_SPRITE, TAB_HEIGHT);
             g.renderItem(tabs.get(i).icon(), left ? x + 8 : x + TAB_TUCK + 4, y + 3);
@@ -417,7 +509,7 @@ public class CatalogScreen extends Screen {
     private void drawCategoryTabs(GuiGraphics g, RecipeView v, int mouseX, int mouseY) {
         List<RecipeEntry> categories = categories(v);
         // over the right page, where the recipes are
-        int bx = layout.x(), by = layout.y(), pw = layout.pageWidth(), left = bx + pw + 14, right = bx + 2 * pw - 14;
+        int by = layout.y(), page = layout.x() + bookWidth() - layout.pageWidth(), left = page + 14, right = page + layout.pageWidth() - 14;
         int visible = Math.max(1, (right - left) / TOP_TAB_STEP);
         int current = Math.clamp(v.category(), 0, Math.max(0, categories.size() - 1));
         // when the view changes (another item, Back), scroll so the open bookmark is in view; otherwise keep the player's scrolling
@@ -453,10 +545,11 @@ public class CatalogScreen extends Screen {
         if (side == 0 && v.spread() > 0) {
             button(g, BACKWARD, BACKWARD_HOT, px + MARGIN, footerY, 18, 10, mouseX, mouseY, () -> turnPage(-1));
         }
-        if (side == 1 && v.spread() < spreads - 1) {
+        boolean last = compact || side == 1;
+        if (last && v.spread() < spreads - 1) {
             button(g, FORWARD, FORWARD_HOT, px + pw - MARGIN - 18, footerY, 18, 10, mouseX, mouseY, () -> turnPage(1));
         }
-        if (side == 1) {
+        if (last) {
             String number = (v.spread() + 1) + " / " + spreads;
             g.drawString(font, number, px + (pw - font.width(number)) / 2, footerY + 1, FAINT_INK, false);
         }
@@ -471,7 +564,7 @@ public class CatalogScreen extends Screen {
             g.drawString(font, name, px + (pw - font.width(name)) / 2, py + MARGIN, INK, false);
             if (items.isEmpty()) g.drawString(font, Component.translatable("gui.thecatalog.nothing_found"), gx, gy, FAINT_INK, false);
         }
-        int start = (v.spread() * 2 + side) * perPage;
+        int start = page(v, side) * perPage;
         for (int i = 0; i < perPage && start + i < items.size(); i++) {
             drawStack(g, items.get(start + i), gx + i % cols * SLOT, gy + i / cols * SLOT, mouseX, mouseY);
         }
@@ -479,22 +572,17 @@ public class CatalogScreen extends Screen {
 
     private void drawRecipePage(GuiGraphics g, RecipeView v, int side, int px, int py, int mouseX, int mouseY) {
         List<List<RecipeEntry>> pages = recipePages(v);
-        int page = v.spread() * 2 + side, width = layout.pageWidth() - 2 * MARGIN;
+        int page = page(v, side), width = layout.pageWidth() - 2 * MARGIN;
         int x = px + MARGIN, y = py + MARGIN;
-        if (page == 0) {
-            if (!history.isEmpty()) {
-                button(g, BACK, BACK_HOT, x, y + 3, 14, 10, mouseX, mouseY, this::back);
-                if (inside(mouseX, mouseY, x, y + 3, 14, 10)) hoveredText = Component.translatable("gui.thecatalog.back");
+        if (compact || page == 0) {
+            drawRecipeHeader(g, v, x, y, width, mouseX, mouseY);
+            if (!compact) {
+                drawDescription(g, description(v.stack()), x, y + RECIPE_HEADER, width, py + layout.pageHeight() - FOOTER);
+                return;
             }
-            drawStack(g, v.stack(), x + 16, y - 1, mouseX, mouseY);
-            g.drawString(font, trim(v.stack().getHoverName(), width - 36), x + 36, y + 4, INK, false);
-            Component recipes = Component.translatable("gui.thecatalog.recipes"), uses = Component.translatable("gui.thecatalog.uses");
-            modeToggle(g, recipes, x, y + 22, !v.uses(), mouseX, mouseY, () -> switchMode(v, false));
-            modeToggle(g, uses, x + font.width(recipes) + 10, y + 22, v.uses(), mouseX, mouseY, () -> switchMode(v, true));
-            drawDescription(g, description(v.stack()), x, y + RECIPE_HEADER, width, py + layout.pageHeight() - FOOTER);
-            return;
+            y += RECIPE_HEADER;
         }
-        if (page == 1 && pages.size() == 1) {
+        if (pages.size() == (compact ? 0 : 1) && (compact || page == 1)) {
             String key = v.uses() ? "gui.thecatalog.no_uses" : "gui.thecatalog.no_recipes";
             g.drawString(font, Component.translatable(key), x, y, FAINT_INK, false);
         }
@@ -506,6 +594,19 @@ public class CatalogScreen extends Screen {
             else if (entry instanceof Generation gen) drawGeneration(g, gen, x, y, width, mouseX, mouseY);
             y += entry.pageHeight(width) + RECIPE_GAP;
         }
+    }
+
+    /** Back button, the item and its name, and the Recipes / Uses toggle. */
+    private void drawRecipeHeader(GuiGraphics g, RecipeView v, int x, int y, int width, int mouseX, int mouseY) {
+        if (!memory.history.isEmpty()) {
+            button(g, BACK, BACK_HOT, x, y + 3, 14, 10, mouseX, mouseY, this::back);
+            if (inside(mouseX, mouseY, x, y + 3, 14, 10)) hoveredText = Component.translatable("gui.thecatalog.back");
+        }
+        drawStack(g, v.stack(), x + 16, y - 1, mouseX, mouseY);
+        g.drawString(font, trim(v.stack().getHoverName(), width - 36), x + 36, y + 4, INK, false);
+        Component recipes = Component.translatable("gui.thecatalog.recipes"), uses = Component.translatable("gui.thecatalog.uses");
+        modeToggle(g, recipes, x, y + 22, !v.uses(), mouseX, mouseY, () -> switchMode(v, false));
+        modeToggle(g, uses, x + font.width(recipes) + 10, y + 22, v.uses(), mouseX, mouseY, () -> switchMode(v, true));
     }
 
     /**
@@ -617,7 +718,7 @@ public class CatalogScreen extends Screen {
         g.drawString(font, trim(gen.where(), width - 20), x + 20, y + 4, INK, false);
         Component biomes = gen.biomeList();
         if (biomes != null && inside(mouseX, mouseY, x, y, width, 16)) hoveredText = biomes;
-        int top = gen.chartTop(), bottom = gen.chartBottom(), chartTop = y + Generation.HEADER + Generation.GAP, h = Generation.CHART;
+        int top = gen.chartTop(), bottom = gen.chartBottom(), chartTop = y + Generation.HEADER + Generation.GAP, h = gen.chart;
         int axis = x + 24, plotX = axis + 6, plotW = width - (plotX - x) - 20;
         double max = 0;
         for (int row = 0; row < h; row++) max = Math.max(max, gen.density(worldY(row, top, bottom, h)));
@@ -698,6 +799,11 @@ public class CatalogScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        if (compact && !isOver(mouseX, mouseY)) {
+            search.setFocused(false);
+            setFocused(null);
+            return false;
+        }
         if (search.isMouseOver(mouseX, mouseY)) {
             if (button == GLFW.GLFW_MOUSE_BUTTON_RIGHT) search.setValue("");
             return super.mouseClicked(mouseX, mouseY, button);
@@ -722,14 +828,14 @@ public class CatalogScreen extends Screen {
             back();
             return true;
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return compact || super.mouseClicked(mouseX, mouseY, button);
     }
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (scrollY == 0) return false;
-        boolean overTabs = tabsLeft() ? mouseX < layout.x() : mouseX >= layout.x() + 2 * layout.pageWidth();
-        if (overTabs) tabScroll -= (int) Math.signum(scrollY); // over the bookmarks
+        boolean overTabs = compact || tabsLeft() ? mouseX < layout.x() : mouseX >= layout.x() + bookWidth();
+        if (overTabs) memory.tabScroll -= (int) Math.signum(scrollY); // over the bookmarks
         else if (flipFrom == null) turnPage(scrollY < 0 ? 1 : -1);
         return true;
     }
@@ -740,6 +846,8 @@ public class CatalogScreen extends Screen {
             super.keyPressed(keyCode, scanCode, modifiers);
             return true; // typing must not trigger the shortcuts below
         }
+        // the panel leaves Escape, and keys pressed with the mouse elsewhere, to the container screen
+        if (compact && (keyCode == GLFW.GLFW_KEY_ESCAPE || !isOver(lastMouseX, lastMouseY))) return false;
         InputConstants.Key key = InputConstants.getKey(keyCode, scanCode);
         if (flipFrom == null) {
             boolean recipes = CatalogClient.RECIPES.isActiveAndMatches(key), uses = CatalogClient.USES.isActiveAndMatches(key);
@@ -752,6 +860,7 @@ public class CatalogScreen extends Screen {
                 case GLFW.GLFW_KEY_LEFT, GLFW.GLFW_KEY_PAGE_UP -> turnPage(-1);
                 case GLFW.GLFW_KEY_RIGHT, GLFW.GLFW_KEY_PAGE_DOWN -> turnPage(1);
                 default -> {
+                    if (compact) return false;
                     if (minecraft.options.keyInventory.isActiveAndMatches(key) || CatalogClient.OPEN.matches(keyCode, scanCode)) {
                         onClose();
                         return true;

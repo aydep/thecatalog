@@ -9,6 +9,7 @@ import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.Slot;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -60,16 +61,24 @@ public final class CatalogClient {
         }
     }
 
-    /** R / U over an item in any inventory screen opens the book on that item's recipes / uses. */
+    /**
+     * R / U over an item in any inventory screen shows that item's recipes / uses: in the side panel if it is open,
+     * otherwise in the book.
+     */
     @SubscribeEvent
     static void onScreenKey(ScreenEvent.KeyPressed.Pre event) {
         if (!(event.getScreen() instanceof AbstractContainerScreen<?> screen)) return;
         if (screen.children().stream().anyMatch(c -> c instanceof EditBox box && box.isVisible() && box.isFocused())) return;
+        CatalogScreen panel = CatalogScreen.panelOf(screen);
+        if (panel != null && panel.typing()) return;
         InputConstants.Key key = InputConstants.getKey(event.getKeyCode(), event.getScanCode());
         boolean recipes = RECIPES.isActiveAndMatches(key), uses = USES.isActiveAndMatches(key);
         Slot slot = screen.getSlotUnderMouse();
-        if (!(recipes || uses) || slot == null || !slot.hasItem() || !hasBook()) return;
-        Minecraft.getInstance().setScreen(new CatalogScreen(screen, new CatalogScreen.RecipeView(slot.getItem().copyWithCount(1), uses, 0, 0)));
+        if (!(recipes || uses) || slot == null || !slot.hasItem()) return;
+        ItemStack stack = slot.getItem().copyWithCount(1);
+        if (panel != null) panel.open(stack, uses);
+        else if (hasBook()) Minecraft.getInstance().setScreen(new CatalogScreen(screen, new CatalogScreen.RecipeView(stack, uses, 0, 0)));
+        else return;
         event.setCanceled(true);
     }
 
