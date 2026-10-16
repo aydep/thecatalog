@@ -99,8 +99,6 @@ public class CatalogScreen extends Screen {
 
     private record Hotspot(int x, int y, int w, int h, Runnable action) {}
 
-    private record TreeHit(int x, int y, int w, int h, TreeKey key) {}
-
     /** Remembered while the game runs, so the book reopens where it was left, Back history included. */
     private static final class Memory {
         View lastView = new IndexView(0, "", 0);
@@ -139,7 +137,7 @@ public class CatalogScreen extends Screen {
     private @Nullable ExternalRecipes.Entry hoveredExternal; // a JEI recipe under the mouse draws its own tooltips
     private @Nullable Component hoveredText;
     private @Nullable Component hoveredHelp; // an extra line under the hovered item's tooltip
-    private final List<TreeHit> treeHits = new ArrayList<>();
+    private @Nullable TreeKey hoveredNode; // the recipe tree step under the mouse
     private @Nullable TreeView panned; // the tree the pan offset belongs to
     private double panX, panY;
 
@@ -428,6 +426,8 @@ public class CatalogScreen extends Screen {
 
     @Override
     public void render(GuiGraphics g, int mouseX, int mouseY, float partialTick) {
+        // another screen drawing this one behind its opening transition (Create's Ponder): the book is already closed
+        if (!compact && minecraft.screen != this) return;
         if (flipFrom != null && Util.getMillis() - flipStart >= ClientConfig.PAGE_TURN_MILLIS.get()) {
             flipFrom = null;
             updateSearch();
@@ -439,7 +439,7 @@ public class CatalogScreen extends Screen {
         hoveredText = null;
         hoveredHelp = null;
         hotspots.clear();
-        treeHits.clear();
+        hoveredNode = null;
         super.render(g, mouseX, mouseY, partialTick); // the book (renderBackground), then the search box
         if (hoveredExternal != null && hoveredExternal.drawTooltip(g, mouseX, mouseY)) {
             // JEI drew its own tooltip (fluids, chances, tag lists...)
@@ -749,6 +749,13 @@ public class CatalogScreen extends Screen {
         return node.step() == null ? BASE_W : NODE_W;
     }
 
+    /** From the top of the node's box to the bottom of its lowest descendant. */
+    private int treeHeight(RecipeTree.Node<TreeKey> node) {
+        int below = 0;
+        for (RecipeTree.Node<TreeKey> child : node.children()) below = Math.max(below, LEVEL + treeHeight(child));
+        return Math.max(node.step() == null ? 20 : NODE_H, below);
+    }
+
     private int subtreeWidth(RecipeTree.Node<TreeKey> node, Map<RecipeTree.Node<TreeKey>, Integer> widths) {
         Integer known = widths.get(node);
         if (known != null) return known;
@@ -790,12 +797,21 @@ public class CatalogScreen extends Screen {
             panned = v;
             panX = panY = 0;
         }
+        // shrunk to fit the area, down to half size; past that, drag to see the rest
         Map<RecipeTree.Node<TreeKey>, Integer> widths = new java.util.IdentityHashMap<>();
-        int originX = areaX + (areaW - subtreeWidth(top, widths)) / 2 + (int) panX, originY = areaY + 2 + (int) panY;
+        int treeW = subtreeWidth(top, widths), treeH = treeHeight(top);
+        float scale = Mth.clamp(Math.min((float) areaW / treeW, (float) (areaH - 2) / treeH), 0.5f, 1f);
+        int originX = areaX + (int) ((areaW - treeW * scale) / 2 + panX), originY = areaY + 2 + (int) panY;
         int clipLeft = Math.max(areaX, px), clipRight = Math.min(areaX + areaW, px + pw);
         boolean mouseHere = inside(mouseX, mouseY, clipLeft, areaY, clipRight - clipLeft, areaH);
+        int treeMouseX = mouseHere ? Mth.floor((mouseX - originX) / scale) : Integer.MIN_VALUE / 2;
+        int treeMouseY = mouseHere ? Mth.floor((mouseY - originY) / scale) : Integer.MIN_VALUE / 2;
         g.enableScissor(clipLeft, areaY, clipRight, areaY + areaH);
-        drawNode(g, top, originX, originY, widths, mouseHere ? mouseX : -1, mouseHere ? mouseY : -1);
+        g.pose().pushPose();
+        g.pose().translate(originX, originY, 0);
+        g.pose().scale(scale, scale, 1);
+        drawNode(g, top, 0, 0, widths, treeMouseX, treeMouseY);
+        g.pose().popPose();
         g.disableScissor();
         // total cost on the left page, leftovers on the right
         int bandY = py + ph - MARGIN - TOTALS + 4;
@@ -826,7 +842,7 @@ public class CatalogScreen extends Screen {
             bottom = top + 20;
         }
         if (inside(mouseX, mouseY, x, top, w, bottom - top)) {
-            treeHits.add(new TreeHit(x, top, w, bottom - top, node.key()));
+            hoveredNode = node.key();
             hoveredHelp = Component.translatable("gui.thecatalog.tree_help");
         }
         List<RecipeTree.Node<TreeKey>> children = node.children();
@@ -1023,13 +1039,10 @@ public class CatalogScreen extends Screen {
         search.setFocused(false);
         setFocused(null);
         if (flipFrom != null) return true;
-        if (view instanceof TreeView t) {
-            for (TreeHit hit : treeHits) {
-                if (!inside(mouseX, mouseY, hit.x(), hit.y(), hit.w(), hit.h())) continue;
-                if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) t.tree().cycle(hit.key());
-                else if (button == GLFW.GLFW_MOUSE_BUTTON_RIGHT) t.tree().toggleBase(hit.key());
-                return true;
-            }
+        if (view instanceof TreeView t && hoveredNode != null && button <= GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
+            if (button == GLFW.GLFW_MOUSE_BUTTON_LEFT) t.tree().cycle(hoveredNode);
+            else t.tree().toggleBase(hoveredNode);
+            return true;
         }
         // hovered and hotspots come from the last frame drawn, which is what the player is looking at
         if (!hovered.isEmpty() && button <= GLFW.GLFW_MOUSE_BUTTON_RIGHT) {
