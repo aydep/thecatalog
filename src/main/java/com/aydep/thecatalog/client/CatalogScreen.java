@@ -51,13 +51,13 @@ public class CatalogScreen extends Screen {
 
     private record Hotspot(int x, int y, int w, int h, Runnable action) {}
 
-    // Remembered while the game runs, so the book reopens where it was left.
+    // Remembered while the game runs, so the book reopens where it was left, Back history included.
     private static View lastView = new IndexView(0, "", 0);
+    private static final Deque<View> history = new ArrayDeque<>();
     private static int tabScroll;
 
     private final @Nullable Screen parent;
     private final CatalogIndex index = CatalogIndex.get();
-    private final Deque<View> history = new ArrayDeque<>();
     private final Map<Object, Object> cache = new HashMap<>();
     private final List<Hotspot> hotspots = new ArrayList<>();
     private View view;
@@ -82,6 +82,7 @@ public class CatalogScreen extends Screen {
 
     static void forget() {
         lastView = new IndexView(0, "", 0);
+        history.clear();
         tabScroll = 0;
     }
 
@@ -262,23 +263,23 @@ public class CatalogScreen extends Screen {
         g.pose().popPose();
     }
 
-    /** Bookmarks down the right edge; arrows scroll to the previous / next group when they don't all fit. */
+    /** Bookmarks down the left edge; arrows scroll to the previous / next group when they don't all fit. */
     private void drawTabs(GuiGraphics g, int mouseX, int mouseY) {
         List<CatalogIndex.Tab> tabs = index.tabs;
-        int pw = layout.pageWidth(), tx = layout.x() + 2 * pw - 4, top = layout.y() + 12;
+        int pw = layout.pageWidth(), tx = layout.x() - BookLayout.TAB_WIDTH + 4, top = layout.y() + 12;
         int visible = (layout.pageHeight() - 24) / TAB_HEIGHT;
         tabScroll = Math.clamp(tabScroll, 0, Math.max(0, tabs.size() - visible));
         if (tabScroll > 0) {
-            button(g, TAB_UP, TAB_UP, tx + 8, layout.y() + 3, 12, 7, mouseX, mouseY, () -> tabScroll -= visible);
+            button(g, TAB_UP, TAB_UP, tx + 5, layout.y() + 3, 12, 7, mouseX, mouseY, () -> tabScroll -= visible);
         }
         if (tabScroll + visible < tabs.size()) {
-            button(g, TAB_DOWN, TAB_DOWN, tx + 8, top + visible * TAB_HEIGHT + 2, 12, 7, mouseX, mouseY, () -> tabScroll += visible);
+            button(g, TAB_DOWN, TAB_DOWN, tx + 5, top + visible * TAB_HEIGHT + 2, 12, 7, mouseX, mouseY, () -> tabScroll += visible);
         }
         int current = view instanceof IndexView v ? v.tab() : -1;
         for (int i = tabScroll; i < Math.min(tabs.size(), tabScroll + visible); i++) {
-            int x = tx + (i == current ? 3 : 0), y = top + (i - tabScroll) * TAB_HEIGHT;
+            int x = tx - (i == current ? 3 : 0), y = top + (i - tabScroll) * TAB_HEIGHT;
             g.blitSprite(i == current ? TAB_SELECTED : TAB, x, y, 26, TAB_HEIGHT);
-            g.renderItem(tabs.get(i).icon(), x + 7, y + 3);
+            g.renderItem(tabs.get(i).icon(), x + 3, y + 3);
             if (inside(mouseX, mouseY, x, y, 26, TAB_HEIGHT)) hoveredText = tabs.get(i).name();
             int tab = i;
             hotspots.add(new Hotspot(x, y, 26, TAB_HEIGHT, () -> selectTab(tab)));
@@ -424,7 +425,7 @@ public class CatalogScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
         if (scrollY == 0) return false;
-        if (mouseX >= layout.x() + 2 * layout.pageWidth()) tabScroll -= (int) Math.signum(scrollY); // over the bookmarks
+        if (mouseX < layout.x()) tabScroll -= (int) Math.signum(scrollY); // over the bookmarks
         else if (flipFrom == null) turnPage(scrollY < 0 ? 1 : -1);
         return true;
     }
@@ -457,6 +458,11 @@ public class CatalogScreen extends Screen {
             return true;
         }
         return super.keyPressed(keyCode, scanCode, modifiers);
+    }
+
+    @Override
+    public boolean isPauseScreen() {
+        return false; // the world keeps running while you read, like an inventory screen
     }
 
     @Override

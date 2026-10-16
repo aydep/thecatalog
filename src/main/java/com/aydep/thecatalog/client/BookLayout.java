@@ -11,7 +11,8 @@ public record BookLayout(int x, int y, int pageWidth, int pageHeight, int cols, 
         int ph = Math.clamp(screenHeight - 16, MIN_PAGE_HEIGHT, MAX_PAGE_HEIGHT);
         int cols = (pw - 2 * MARGIN) / SLOT;
         int rows = (ph - MARGIN - HEADER - FOOTER) / SLOT;
-        return new BookLayout((screenWidth - 2 * pw - TAB_WIDTH) / 2, (screenHeight - ph) / 2, pw, ph, cols, rows);
+        // x is the book's left edge; the bookmark column sits left of it
+        return new BookLayout((screenWidth - 2 * pw - TAB_WIDTH) / 2 + TAB_WIDTH, (screenHeight - ph) / 2, pw, ph, cols, rows);
     }
 
     public int perPage() {

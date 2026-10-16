@@ -24,7 +24,7 @@ class CatalogLogicTest {
         BookLayout small = BookLayout.fit(320, 240); // smallest window at GUI scale
         assertEquals(142, small.pageWidth());
         assertEquals(6, small.cols());
-        assertTrue(small.x() >= 0 && 2 * small.pageWidth() + BookLayout.TAB_WIDTH + small.x() <= 320);
+        assertTrue(small.x() - BookLayout.TAB_WIDTH >= 0 && small.x() + 2 * small.pageWidth() <= 320);
         BookLayout big = BookLayout.fit(1000, 600);
         assertEquals(200, big.pageWidth());
         assertEquals(9, big.cols());
