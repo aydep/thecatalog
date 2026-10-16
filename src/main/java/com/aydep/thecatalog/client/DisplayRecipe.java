@@ -8,6 +8,7 @@ import java.util.Locale;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 import net.minecraft.Util;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -25,7 +26,9 @@ import org.jetbrains.annotations.Nullable;
 
 /** A recipe laid out for a book page: item slots and pictures at fixed spots inside a width x height box. */
 public final class DisplayRecipe implements RecipeEntry {
-    public static final int CAPTION = 11;
+    /** Space above the recipe panel. (The category name is on the bookmark, not above each recipe.) */
+    public static final int CAPTION = 2;
+    private static final ResourceLocation BREWING = ResourceLocation.withDefaultNamespace("brewing");
     private static final int S = BookLayout.SLOT;
     /** Padding between the input panel's edge and its slots. */
     public static final int PAD = 3;
@@ -43,6 +46,8 @@ public final class DisplayRecipe implements RecipeEntry {
     public record Picture(ResourceLocation sprite, int x, int y, int width, int height) {}
 
     public final Component caption;
+    private @Nullable ResourceLocation categoryId;
+    private ItemStack icon = ItemStack.EMPTY;
     /** What this recipe is listed under as "recipes"; empty for ones listed only under "uses". */
     final List<ItemStack> results;
     public final List<Slot> inputs = new ArrayList<>();
@@ -60,6 +65,21 @@ public final class DisplayRecipe implements RecipeEntry {
     @Override
     public int pageHeight(int width) {
         return height;
+    }
+
+    @Override
+    public Object category() {
+        return categoryId != null ? categoryId : caption.getString();
+    }
+
+    @Override
+    public Component categoryTitle() {
+        return caption;
+    }
+
+    @Override
+    public void drawCategoryIcon(GuiGraphics g, int x, int y) {
+        g.renderItem(icon, x, y);
     }
 
     public ItemStack shownOutput() {
@@ -81,6 +101,16 @@ public final class DisplayRecipe implements RecipeEntry {
     }
 
     static @Nullable DisplayRecipe of(Recipe<?> recipe, RegistryAccess registries, List<ItemStack> allItems) {
+        DisplayRecipe d = layout(recipe, registries, allItems);
+        if (d == null) return null;
+        d.categoryId = BuiltInRegistries.RECIPE_TYPE.getKey(recipe.getType());
+        ItemStack station = recipe.getToastSymbol();
+        // types that don't name their station report a crafting table; show what they make instead
+        d.icon = recipe.getType() != RecipeType.CRAFTING && station.is(Items.CRAFTING_TABLE) ? d.output.shown() : station;
+        return d;
+    }
+
+    private static @Nullable DisplayRecipe layout(Recipe<?> recipe, RegistryAccess registries, List<ItemStack> allItems) {
         if (recipe instanceof SmithingRecipe smithing) return smithing(smithing, registries, allItems);
         ItemStack result = recipe.getResultItem(registries);
         if (result.isEmpty()) return null; // special recipes (map cloning, fireworks...) have no fixed result
@@ -94,7 +124,10 @@ public final class DisplayRecipe implements RecipeEntry {
     }
 
     static DisplayRecipe brewing(ItemStack input, ItemStack reagent, ItemStack output) {
-        return simple(Items.BREWING_STAND.getDescription(), List.of(List.of(input), List.of(reagent)), output, List.of(output));
+        DisplayRecipe d = simple(Items.BREWING_STAND.getDescription(), List.of(List.of(input), List.of(reagent)), output, List.of(output));
+        d.categoryId = BREWING;
+        d.icon = new ItemStack(Items.BREWING_STAND);
+        return d;
     }
 
     private static DisplayRecipe crafting(Component caption, List<List<ItemStack>> ingredients, ItemStack result, int shapedWidth) {

@@ -3,15 +3,19 @@ package com.aydep.thecatalog.compat.jei;
 import com.aydep.thecatalog.TheCatalog;
 import com.aydep.thecatalog.client.ExternalRecipes;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import mezz.jei.api.constants.VanillaTypes;
 import mezz.jei.api.gui.IRecipeLayoutDrawable;
+import mezz.jei.api.gui.drawable.IDrawable;
 import mezz.jei.api.gui.drawable.IScalableDrawable;
 import mezz.jei.api.recipe.IFocus;
 import mezz.jei.api.recipe.IFocusFactory;
 import mezz.jei.api.recipe.IFocusGroup;
 import mezz.jei.api.recipe.IRecipeManager;
 import mezz.jei.api.recipe.RecipeIngredientRole;
+import mezz.jei.api.recipe.RecipeType;
 import mezz.jei.api.recipe.category.IRecipeCategory;
 import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.client.gui.GuiGraphics;
@@ -29,6 +33,7 @@ final class JeiRecipes implements ExternalRecipes.Source {
 
     private final IRecipeManager recipes;
     private final IFocusFactory focuses;
+    private final Map<RecipeType<?>, ItemStack> catalysts = new HashMap<>();
 
     JeiRecipes(IJeiRuntime runtime) {
         this.recipes = runtime.getRecipeManager();
@@ -45,6 +50,12 @@ final class JeiRecipes implements ExternalRecipes.Source {
         List<ExternalRecipes.Entry> entries = new ArrayList<>();
         recipes.createRecipeCategoryLookup().limitFocus(foci).get().forEach(category -> addRecipes(entries, category, foci, group));
         return entries;
+    }
+
+    /** The first machine of a category (a furnace for smelting), or empty. */
+    private ItemStack catalyst(RecipeType<?> type) {
+        return catalysts.computeIfAbsent(type, t -> recipes.createRecipeCatalystLookup(t).get()
+                .flatMap(i -> i.getIngredient(VanillaTypes.ITEM_STACK).stream()).findFirst().orElse(ItemStack.EMPTY));
     }
 
     private IFocus<ItemStack> focus(RecipeIngredientRole role, ItemStack stack) {
@@ -82,8 +93,20 @@ final class JeiRecipes implements ExternalRecipes.Source {
         }
 
         @Override
-        public Component title() {
+        public Object category() {
+            return category.getRecipeType();
+        }
+
+        @Override
+        public Component categoryTitle() {
             return category.getTitle();
+        }
+
+        @Override
+        public void drawCategoryIcon(GuiGraphics g, int x, int y) {
+            IDrawable icon = category.getIcon();
+            if (icon != null) icon.draw(g, x + (16 - icon.getWidth()) / 2, y + (16 - icon.getHeight()) / 2);
+            else g.renderItem(catalyst(category.getRecipeType()), x, y); // what JEI itself shows when a category has no icon
         }
 
         @Override

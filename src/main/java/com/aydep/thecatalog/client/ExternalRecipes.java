@@ -2,7 +2,6 @@ package com.aydep.thecatalog.client;
 
 import java.util.List;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
 import org.jetbrains.annotations.Nullable;
 
@@ -17,8 +16,6 @@ public final class ExternalRecipes {
     }
 
     public interface Entry extends RecipeEntry {
-        Component title();
-
         /** Unscaled size of the recipe drawing. */
         int width();
 

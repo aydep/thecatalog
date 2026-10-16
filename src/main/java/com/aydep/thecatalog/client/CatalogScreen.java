@@ -9,6 +9,8 @@ import static com.aydep.thecatalog.client.DisplayRecipe.sprite;
 import com.mojang.blaze3d.platform.InputConstants;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.Deque;
 import java.util.HashMap;
 import java.util.List;
@@ -32,10 +34,12 @@ import org.lwjgl.glfw.GLFW;
 
 /** The open book: an item grid with bookmark tabs, and recipe pages. Every page change turns a page. */
 public class CatalogScreen extends Screen {
+    private static final ResourceLocation CRAFTING = ResourceLocation.withDefaultNamespace("crafting");
     private static final ResourceLocation PAGE_LEFT = sprite("page_left"), PAGE_RIGHT = sprite("page_right"), COVER = sprite("cover"),
             SEARCH_TAB = sprite("search_tab"), SEARCH_ICON = sprite("search_icon"),
             SLOT_BOX = sprite("slot"), RECIPE_PANEL = sprite("recipe_panel"), OUTPUT_FRAME = sprite("output_frame"),
-            CHEVRON = sprite("chevron"),
+            CHEVRON = sprite("chevron"), TAB_TOP = sprite("tab_top"), TAB_TOP_SELECTED = sprite("tab_top_selected"),
+            TAB_PREV = sprite("tab_prev"), TAB_NEXT = sprite("tab_next"),
             TAB = sprite("tab"), TAB_SELECTED = sprite("tab_selected"),
             TAB_RIGHT = sprite("tab_right"), TAB_RIGHT_SELECTED = sprite("tab_right_selected"), TAB_UP = sprite("tab_up"), TAB_DOWN = sprite("tab_down"),
             FORWARD = sprite("page_forward"), FORWARD_HOT = sprite("page_forward_highlighted"),
@@ -43,6 +47,7 @@ public class CatalogScreen extends Screen {
             BACK = sprite("back"), BACK_HOT = sprite("back_highlighted");
     private static final int INK = 0xFF4A3524, FAINT_INK = 0xFF9A8462, HOVER = 0x304A3524, BRACE = 0xFFC4A877;
     private static final int SEARCH_TEXT = 0xFF5A4330, SEARCH_HINT = 0xFFB09A74, COVER_BORDER_X = 7, COVER_BORDER_Y = 6;
+    private static final int TOP_TAB_WIDTH = 22, TOP_TAB_HEIGHT = 32, TOP_TAB_STEP = 23;
     private static final int SEARCH_TAB_INSET = 10, TAB_HEIGHT = 22, RECIPE_HEADER = 34, RECIPE_GAP = 6;
 
     sealed interface View permits IndexView, RecipeView {
@@ -51,7 +56,8 @@ public class CatalogScreen extends Screen {
 
     record IndexView(int tab, String query, int spread) implements View {}
 
-    record RecipeView(ItemStack stack, boolean uses, int spread) implements View {}
+    /** {@code category}: which category bookmark is open, an index into that item's categories. */
+    record RecipeView(ItemStack stack, boolean uses, int category, int spread) implements View {}
 
     private record Hotspot(int x, int y, int w, int h, Runnable action) {}
 
@@ -66,6 +72,8 @@ public class CatalogScreen extends Screen {
     private final Map<Object, Object> cache = new HashMap<>();
     private final List<Hotspot> hotspots = new ArrayList<>();
     private View view;
+    private int categoryScroll;
+    private @Nullable View categoryScrollView;
     private @Nullable View flipFrom;
     private boolean flipForward;
     private long flipStart;
@@ -160,7 +168,7 @@ public class CatalogScreen extends Screen {
     private void open(ItemStack stack, boolean uses) {
         if (view instanceof RecipeView v && v.uses() == uses && ItemStack.isSameItemSameComponents(v.stack(), stack)) return;
         history.push(view);
-        flipTo(new RecipeView(stack.copyWithCount(1), uses, 0), true);
+        flipTo(new RecipeView(stack.copyWithCount(1), uses, 0, 0), true);
     }
 
     private void back() {
@@ -184,7 +192,7 @@ public class CatalogScreen extends Screen {
     private static View withSpread(View v, int spread) {
         return switch (v) {
             case IndexView i -> new IndexView(i.tab(), i.query(), spread);
-            case RecipeView r -> new RecipeView(r.stack(), r.uses(), spread);
+            case RecipeView r -> new RecipeView(r.stack(), r.uses(), r.category(), spread);
         };
     }
 
@@ -223,13 +231,38 @@ public class CatalogScreen extends Screen {
         return v.uses() ? index.usesFor(v.stack()) : index.recipesFor(v.stack());
     }
 
+    private List<? extends RecipeEntry> allRecipes(RecipeView v) {
+        return cached(List.of("all", v.stack().getItem(), v.stack().getComponentsPatch(), v.uses()), () -> lookup(v));
+    }
+
+    /** One entry per category, in order of first appearance; JEI's order, or crafting first for The Catalog's own. */
+    private List<RecipeEntry> categories(RecipeView v) {
+        return cached(List.of("categories", v.stack().getItem(), v.stack().getComponentsPatch(), v.uses()), () -> {
+            Map<Object, RecipeEntry> first = new LinkedHashMap<>();
+            for (RecipeEntry entry : allRecipes(v)) first.putIfAbsent(entry.category(), entry);
+            List<RecipeEntry> categories = new ArrayList<>(first.values());
+            categories.sort(Comparator.comparing(e -> !CRAFTING.equals(e.category()))); // stable: only moves crafting to the front
+            return categories;
+        });
+    }
+
+    /** The open category's recipes. */
+    private List<RecipeEntry> recipesIn(RecipeView v) {
+        List<RecipeEntry> categories = categories(v);
+        if (categories.isEmpty()) return List.of();
+        Object category = categories.get(Math.clamp(v.category(), 0, categories.size() - 1)).category();
+        return allRecipes(v).stream().filter(e -> e.category().equals(category)).map(e -> (RecipeEntry) e).toList();
+    }
+
+    /** Page 0 (the first left page) is left blank; page 1 starts with the item header. */
     private List<List<RecipeEntry>> recipePages(RecipeView v) {
-        return cached(List.of(v.stack().getItem(), v.stack().getComponentsPatch(), v.uses()), () -> {
+        return cached(List.of(v.stack().getItem(), v.stack().getComponentsPatch(), v.uses(), v.category()), () -> {
             List<List<RecipeEntry>> pages = new ArrayList<>();
+            pages.add(List.of());
             List<RecipeEntry> page = new ArrayList<>();
             int used = 0, width = layout.pageWidth() - 2 * MARGIN;
-            for (RecipeEntry recipe : lookup(v)) {
-                int room = layout.pageHeight() - MARGIN - FOOTER - (pages.size() % 2 == 0 ? RECIPE_HEADER : 0);
+            for (RecipeEntry recipe : recipesIn(v)) {
+                int room = layout.pageHeight() - MARGIN - FOOTER - (pages.size() == 1 ? RECIPE_HEADER : 0);
                 int height = recipe.pageHeight(width);
                 // shortcut: a recipe taller than a whole page (huge modded grids) overflows it instead of being scaled down.
                 if (!page.isEmpty() && used + height > room) {
@@ -287,6 +320,7 @@ public class CatalogScreen extends Screen {
         g.blitSprite(COVER, bx - COVER_BORDER_X, by - COVER_BORDER_Y, 2 * pw + 2 * COVER_BORDER_X, ph + 2 * COVER_BORDER_Y);
         boolean ready = ready();
         if (ready) drawTabs(g, mouseX, mouseY);
+        if (ready && view instanceof RecipeView v) drawCategoryTabs(g, v, mouseX, mouseY);
         g.blitSprite(PAGE_LEFT, bx, by, pw, ph);
         g.blitSprite(PAGE_RIGHT, bx + pw, by, pw, ph);
         g.blitSprite(SEARCH_ICON, search.getX() - 13, search.getY() - 1, 9, 9);
@@ -351,6 +385,35 @@ public class CatalogScreen extends Screen {
         }
     }
 
+    /** Category bookmarks along the top edge (4px tucked under the page); arrows scroll when they don't all fit. */
+    private void drawCategoryTabs(GuiGraphics g, RecipeView v, int mouseX, int mouseY) {
+        List<RecipeEntry> categories = categories(v);
+        int bx = layout.x(), by = layout.y(), left = bx + 18, right = bx + 2 * layout.pageWidth() - 18;
+        int visible = Math.max(1, (right - left) / TOP_TAB_STEP);
+        int current = Math.clamp(v.category(), 0, Math.max(0, categories.size() - 1));
+        // when the view changes (another item, Back), scroll so the open bookmark is in view; otherwise keep the player's scrolling
+        if (v != categoryScrollView) {
+            categoryScrollView = v;
+            if (current < categoryScroll || current >= categoryScroll + visible) categoryScroll = current / visible * visible;
+        }
+        categoryScroll = Math.clamp(categoryScroll, 0, Math.max(0, categories.size() - visible));
+        int arrowY = by - 23;
+        if (categoryScroll > 0) {
+            button(g, TAB_PREV, TAB_PREV, bx + 7, arrowY, 7, 12, mouseX, mouseY, () -> categoryScroll -= visible);
+        }
+        if (categoryScroll + visible < categories.size()) {
+            button(g, TAB_NEXT, TAB_NEXT, right + 4, arrowY, 7, 12, mouseX, mouseY, () -> categoryScroll += visible);
+        }
+        for (int i = categoryScroll; i < Math.min(categories.size(), categoryScroll + visible); i++) {
+            int x = left + (i - categoryScroll) * TOP_TAB_STEP, y = by - TOP_TAB_HEIGHT + 4 - (i == current ? 6 : 0);
+            g.blitSprite(i == current ? TAB_TOP_SELECTED : TAB_TOP, x, y, TOP_TAB_WIDTH, TOP_TAB_HEIGHT);
+            categories.get(i).drawCategoryIcon(g, x + 3, y + 6);
+            if (inside(mouseX, mouseY, x, y, TOP_TAB_WIDTH, TOP_TAB_HEIGHT - 4)) hoveredText = categories.get(i).categoryTitle();
+            int category = i;
+            hotspots.add(new Hotspot(x, y, TOP_TAB_WIDTH, TOP_TAB_HEIGHT - 4, () -> selectCategory(v, category)));
+        }
+    }
+
     private void drawPage(GuiGraphics g, View v, int side, int mouseX, int mouseY) {
         int pw = layout.pageWidth(), px = layout.x() + side * pw, py = layout.y();
         switch (v) {
@@ -389,7 +452,7 @@ public class CatalogScreen extends Screen {
         List<List<RecipeEntry>> pages = recipePages(v);
         int page = v.spread() * 2 + side, width = layout.pageWidth() - 2 * MARGIN;
         int x = px + MARGIN, y = py + MARGIN;
-        if (side == 0) {
+        if (page == 1) {
             if (!history.isEmpty()) {
                 button(g, BACK, BACK_HOT, x, y + 3, 14, 10, mouseX, mouseY, this::back);
                 if (inside(mouseX, mouseY, x, y + 3, 14, 10)) hoveredText = Component.translatable("gui.thecatalog.back");
@@ -400,21 +463,25 @@ public class CatalogScreen extends Screen {
             modeToggle(g, recipes, x, y + 22, !v.uses(), mouseX, mouseY, () -> switchMode(v, false));
             modeToggle(g, uses, x + font.width(recipes) + 10, y + 22, v.uses(), mouseX, mouseY, () -> switchMode(v, true));
             y += RECIPE_HEADER;
-            if (pages.isEmpty()) {
+            if (pages.size() == 1) {
                 String key = v.uses() ? "gui.thecatalog.no_uses" : "gui.thecatalog.no_recipes";
                 g.drawString(font, Component.translatable(key), x, y, FAINT_INK, false);
             }
         }
         if (page >= pages.size()) return;
         for (RecipeEntry entry : pages.get(page)) {
-            if (entry instanceof DisplayRecipe recipe) drawRecipe(g, recipe, x, y, width, mouseX, mouseY);
+            if (entry instanceof DisplayRecipe recipe) drawRecipe(g, recipe, x, y, mouseX, mouseY);
             else if (entry instanceof ExternalRecipes.Entry external) drawExternal(g, external, x, y, width, mouseX, mouseY);
             y += entry.pageHeight(width) + RECIPE_GAP;
         }
     }
 
     private void switchMode(RecipeView v, boolean uses) {
-        if (v.uses() != uses) flipTo(new RecipeView(v.stack(), uses, 0), uses);
+        if (v.uses() != uses) flipTo(new RecipeView(v.stack(), uses, 0, 0), uses);
+    }
+
+    private void selectCategory(RecipeView v, int category) {
+        if (category != v.category()) flipTo(new RecipeView(v.stack(), v.uses(), category, 0), category > v.category());
     }
 
     private void modeToggle(GuiGraphics g, Component label, int x, int y, boolean active, int mouseX, int mouseY, Runnable action) {
@@ -425,9 +492,8 @@ public class CatalogScreen extends Screen {
         hotspots.add(new Hotspot(x, y - 1, w, 11, action));
     }
 
-    /** Caption; input slots in a rounded panel; a brace, a chevron and the framed output, centered on the grid. */
-    private void drawRecipe(GuiGraphics g, DisplayRecipe recipe, int x, int y, int width, int mouseX, int mouseY) {
-        g.drawString(font, trim(recipe.caption, width), x, y, FAINT_INK, false);
+    /** Input slots in a rounded panel; a brace, a chevron and the framed output, centered on the grid. */
+    private void drawRecipe(GuiGraphics g, DisplayRecipe recipe, int x, int y, int mouseX, int mouseY) {
         int top = y + DisplayRecipe.CAPTION, bottom = top + recipe.panelHeight, right = x + recipe.panelWidth;
         g.blitSprite(RECIPE_PANEL, x, top, recipe.panelWidth, recipe.panelHeight);
         for (DisplayRecipe.Slot slot : recipe.inputs) {
@@ -443,9 +509,8 @@ public class CatalogScreen extends Screen {
         if (recipe.note != null) g.drawString(font, recipe.note, x + recipe.noteX, y + recipe.noteY, FAINT_INK, false);
     }
 
-    /** A recipe from JEI: its category's title, then the recipe drawn by the category itself, shrunk if too wide. */
+    /** A recipe from JEI, drawn by its category's own code, shrunk if wider than the page. */
     private void drawExternal(GuiGraphics g, ExternalRecipes.Entry entry, int x, int y, int width, int mouseX, int mouseY) {
-        g.drawString(font, trim(entry.title(), width), x, y, FAINT_INK, false);
         float scale = entry.scale(width);
         int top = y + DisplayRecipe.CAPTION;
         entry.draw(g, x, top, scale, mouseX, mouseY);

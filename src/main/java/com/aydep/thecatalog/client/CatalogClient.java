@@ -67,7 +67,7 @@ public final class CatalogClient {
         boolean recipes = RECIPES.isActiveAndMatches(key), uses = USES.isActiveAndMatches(key);
         Slot slot = screen.getSlotUnderMouse();
         if (!(recipes || uses) || slot == null || !slot.hasItem() || !hasBook()) return;
-        Minecraft.getInstance().setScreen(new CatalogScreen(screen, new CatalogScreen.RecipeView(slot.getItem().copyWithCount(1), uses, 0)));
+        Minecraft.getInstance().setScreen(new CatalogScreen(screen, new CatalogScreen.RecipeView(slot.getItem().copyWithCount(1), uses, 0, 0)));
         event.setCanceled(true);
     }
 
