@@ -56,7 +56,7 @@ public final class CatalogClient {
     /** The book only opens by key while the player carries it, unless the config says otherwise. */
     public static boolean hasBook() {
         Player player = Minecraft.getInstance().player;
-        return player != null && (!ClientConfig.REQUIRE_BOOK.get() || player.getInventory().contains(stack -> stack.is(TheCatalog.CATALOG.get())));
+        return player != null && (!ClientConfig.REQUIRE_BOOK.get() || player.getInventory().contains(TheCatalog::isCatalog));
     }
 
     @SubscribeEvent

@@ -131,6 +131,9 @@ dependencies {
     // the API can't hide JEI's item list, so the survival-mode hiding uses JEI's own on/off switch
     compileOnly("mezz.jei:jei-${minecraft_version}-common:${jei_version}") { transitive = false }
     localRuntime "mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}"
+    // Akashic Tome is optional: The Catalog can go inside the tome and still counts as carried
+    compileOnly "maven.modrinth:akashic-tome:MRro5nPG" // 1.21.1-1.8-30
+    localRuntime "maven.modrinth:akashic-tome:MRro5nPG"
     // Big mods in the dev game, to check The Catalog with them (not dependencies of the mod)
     localRuntime "maven.modrinth:create:6.0.10+mc1.21.1" // Flywheel, Ponder and Registrate come inside it
     localRuntime "maven.modrinth:ars-nouveau:5.13.3"

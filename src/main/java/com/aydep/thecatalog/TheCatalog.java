@@ -1,5 +1,6 @@
 package com.aydep.thecatalog;
 
+import com.aydep.thecatalog.compat.akashic.AkashicCompat;
 import com.google.gson.Gson;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.player.Player;
@@ -8,6 +9,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.ModList;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.common.ModConfigSpec;
@@ -26,9 +28,15 @@ public class TheCatalog {
     private static final String RECEIVED_TAG = MODID + ":received";
     private static final Gson GSON = new Gson();
 
+    public static final boolean AKASHIC_TOME = ModList.get().isLoaded("akashictome");
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(MODID);
-    public static final DeferredItem<CatalogItem> CATALOG =
-            ITEMS.register("catalog", () -> new CatalogItem(new Item.Properties().stacksTo(1)));
+    public static final DeferredItem<Item> CATALOG = ITEMS.register("catalog", () -> AKASHIC_TOME
+            ? AkashicCompat.catalogItem(new Item.Properties().stacksTo(1)) : new CatalogItem(new Item.Properties().stacksTo(1)));
+
+    /** The Catalog itself, or an Akashic Tome with it inside: either counts as carrying the book. */
+    public static boolean isCatalog(ItemStack stack) {
+        return stack.is(CATALOG.get()) || AKASHIC_TOME && AkashicCompat.holdsCatalog(stack);
+    }
 
     private static final ModConfigSpec.Builder CONFIG = new ModConfigSpec.Builder();
     private static final ModConfigSpec.BooleanValue GIVE_ON_FIRST_JOIN = CONFIG
