@@ -72,8 +72,9 @@ public class CatalogJeiPlugin implements IModPlugin {
         boolean now = player.isCreative();
         try {
             var toggle = Internal.getClientToggleState();
-            if (!now && toggle.isOverlayEnabled()) toggle.setOverlayEnabled(false);
-            else if (now && Boolean.FALSE.equals(creative)) toggle.setOverlayEnabled(true); // back in Creative: show it again
+            // toggle rather than set: older JEI versions (19.51) have no setter
+            if (!now && toggle.isOverlayEnabled()) toggle.toggleOverlayEnabled();
+            else if (now && Boolean.FALSE.equals(creative) && !toggle.isOverlayEnabled()) toggle.toggleOverlayEnabled(); // back in Creative
             creative = now;
         } catch (LinkageError | RuntimeException e) { // JEI internals; a future JEI may change them
             running = false;
